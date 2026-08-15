@@ -9,10 +9,16 @@ dependencies = [
     "numpy>=2.0",
     "nexus-baselines",
     "nexus-config",
-    "nexus-env",
+    # nexus-mdp, not nexus-env. The controller needs the MDP *codec* (observation encoding, action
+    # decoding, MDP_VERSION) and never constructs a gymnasium Env — see ADR-0007. It previously declared
+    # nexus-env, which it did not import, and reached nexus_mdp transitively through it: the declared
+    # graph pulled gymnasium into a service that has no use for it, which is precisely the coupling the
+    # nexus-mdp / nexus-env split exists to end.
+    "nexus-mdp",
     "nexus-errors",
     "nexus-telemetry",
     "nexus-types",
+    "nexus-a1",
 ]
 
 [project.optional-dependencies]

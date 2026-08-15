@@ -86,7 +86,7 @@ ways that then get misdiagnosed as a hyperparameter problem.
 Any change to observation shape/meaning/normalisation, action space/decoding, reward terms/weights/clipping, or
 episode length **is an MDP change**:
 
-1. Bump `MDP_VERSION` in `packages/nexus-env/src/nexus_env/version.py`
+1. Bump `MDP_VERSION` in `packages/nexus-mdp/src/nexus_mdp/version.py`
 2. List every checkpoint it invalidates — search `experiments/runs/*/config.yaml`
 3. Check whether any invalidated run is cited in `docs/evaluation/results.md`. A silently-wrong published number is worse than a broken build
 4. Say all of this in the PR description

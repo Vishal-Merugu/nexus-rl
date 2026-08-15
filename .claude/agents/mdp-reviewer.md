@@ -24,7 +24,7 @@ These are not: simulator internals that leave the observed quantities unchanged,
 
 ### 2. Was `MDP_VERSION` bumped?
 
-`packages/nexus-env/src/nexus_env/version.py`. If it is an MDP change and the version is unchanged, that is a
+`packages/nexus-mdp/src/nexus_mdp/version.py`. If it is an MDP change and the version is unchanged, that is a
 **CRITICAL** finding. No exceptions.
 
 ### 3. Which checkpoints just died?

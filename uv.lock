@@ -9,6 +9,7 @@ resolution-markers = [
 
 [manifest]
 members = [
+    "nexus-a1",
     "nexus-agent",
     "nexus-baselines",
     "nexus-config",
@@ -935,6 +936,23 @@ wheels = [
 ]
 
 [[package]]
+name = "nexus-a1"
+version = "0.1.0"
+source = { editable = "packages/nexus-a1" }
+dependencies = [
+    { name = "nexus-errors" },
+    { name = "nexus-types" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "nexus-errors", editable = "packages/nexus-errors" },
+    { name = "nexus-types", editable = "packages/nexus-types" },
+    { name = "pydantic", specifier = ">=2.10" },
+]
+
+[[package]]
 name = "nexus-agent"
 version = "0.1.0"
 source = { editable = "apps/agent-layer" }
@@ -1001,10 +1019,11 @@ version = "0.1.0"
 source = { editable = "apps/controller" }
 dependencies = [
     { name = "fastapi" },
+    { name = "nexus-a1" },
     { name = "nexus-baselines" },
     { name = "nexus-config" },
-    { name = "nexus-env" },
     { name = "nexus-errors" },
+    { name = "nexus-mdp" },
     { name = "nexus-telemetry" },
     { name = "nexus-types" },
     { name = "numpy" },
@@ -1020,10 +1039,11 @@ policy = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "nexus-a1", editable = "packages/nexus-a1" },
     { name = "nexus-baselines", editable = "packages/nexus-baselines" },
     { name = "nexus-config", editable = "packages/nexus-config" },
-    { name = "nexus-env", editable = "packages/nexus-env" },
     { name = "nexus-errors", editable = "packages/nexus-errors" },
+    { name = "nexus-mdp", editable = "packages/nexus-mdp" },
     { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
     { name = "nexus-types", editable = "packages/nexus-types" },
     { name = "numpy", specifier = ">=2.0" },
@@ -1123,6 +1143,7 @@ name = "nexus-rl-workspace"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "nexus-a1" },
     { name = "nexus-agent" },
     { name = "nexus-baselines" },
     { name = "nexus-config" },
@@ -1149,6 +1170,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "nexus-a1", editable = "packages/nexus-a1" },
     { name = "nexus-agent", editable = "apps/agent-layer" },
     { name = "nexus-baselines", editable = "packages/nexus-baselines" },
     { name = "nexus-config", editable = "packages/nexus-config" },

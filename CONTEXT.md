@@ -56,7 +56,7 @@ Jain's fairness index over per-flow satisfaction ratios (allocated ÷ requested)
 
 ### MDP version (`MDP_VERSION`)
 
-Integer in `nexus_env/version.py`, bumped whenever the observation encoding, action space, or reward definition changes. A checkpoint trained under version N is meaningless under version N+1. Every run artifact records the version it was trained under; evaluation refuses to load a mismatched checkpoint.
+Integer in `nexus_mdp/version.py`, bumped whenever the observation encoding, action space, or reward definition changes. A checkpoint trained under version N is meaningless under version N+1. Every run artifact records the version it was trained under; evaluation refuses to load a mismatched checkpoint.
 
 ### Constraint
 
@@ -91,3 +91,61 @@ A bounded sequence of timesteps used for training and evaluation (default 512). 
 ### Run
 
 One training or evaluation execution, identified by a `run-id`, with its config, metrics, and checkpoints under `experiments/runs/<run-id>/`. A claim without a run-id is not a result.
+
+## O-RAN vocabulary (v2, Track A)
+
+The two-tier design of this system converged independently on the structure the O-RAN Alliance
+standardized. From v2 onward the standard's terms are the primary ones — use these in code and
+conversation, with the v1 term in parentheses where it aids the reader. See ADR-0008.
+
+**Architectural alignment, not conformance.** Nothing here is conformance-tested, and the transport is
+plain HTTP rather than the standard's own bindings. Say "structured according to O-RAN's architecture",
+never "O-RAN compliant".
+
+### xApp
+
+An application on the Near-RT RIC performing near-real-time control. Here: the RL controller service —
+the inner tier. Consumes A1 policy, retains sole authority to allocate.
+
+### rApp
+
+An application on the Non-RT RIC performing slower-timescale work — policy generation, SLA assurance,
+analytics. Here: the LLM agent layer, the outer tier. Issues A1 policy; never a control action.
+
+### Near-RT RIC / Non-RT RIC
+
+RAN Intelligent Controller, near-real-time (10 ms – 1 s control loops, hosts xApps) and non-real-time
+(> 1 s, hosted within SMO, hosts rApps and owns ML model lifecycle). The two-timescale split is the whole
+point: the LLM is never in the fast path.
+
+### A1
+
+The interface carrying policy guidance from the Non-RT tier down to the Near-RT tier. In this repo,
+`nexus-a1` plus the controller's `/a1/*` routes. Carries guidance, never an allocation — the standard's
+own answer to the problem ADR-0002 solved independently.
+
+_Avoid_: "the agent sets an allocation over A1". It cannot; there is no such policy type.
+
+### A1 policy
+
+A versioned document with a `policy_type`, a `scope`, a `statement`, provenance, and a **mandatory
+bounded TTL** (a deliberate deviation — A1 itself requires no lifetime). Translated into a v1
+`Constraint` on acceptance: A1 is the interface, the constraint is the enforcement.
+
+### A1 policy decision
+
+The xApp's answer to an offered policy: `ACCEPTED`, `PARTIALLY_ACCEPTED`, or `REJECTED`, always with an
+operator-facing `reason`, and an `achievable_alternative` where one exists. Partial acceptance is a
+distinct state on purpose — enforcing two of three requested links and reporting plain success is the
+failure this type exists to prevent.
+
+### E2
+
+The interface between the Near-RT RIC and the network elements (E2 nodes) carrying telemetry up and
+control down. Here: the existing `/act` call between simulator and controller. Not a real E2AP
+implementation — the shape, not the protocol.
+
+### SMO
+
+Service Management and Orchestration — the framework hosting the Non-RT RIC. Here: nothing distinct yet;
+the dashboard stands in for the SMO-side operator console.

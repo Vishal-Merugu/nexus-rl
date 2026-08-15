@@ -12,6 +12,7 @@ dependencies = [
     "nexus-errors",
     "nexus-telemetry",
     "nexus-types",
+    "nexus-a1",
     "nexus-sim",
     "nexus-baselines",
     "nexus-mdp",
@@ -40,6 +41,7 @@ nexus-config = { workspace = true }
 nexus-errors = { workspace = true }
 nexus-telemetry = { workspace = true }
 nexus-types = { workspace = true }
+nexus-a1 = { workspace = true }
 nexus-sim = { workspace = true }
 nexus-baselines = { workspace = true }
 nexus-mdp = { workspace = true }
@@ -88,6 +90,7 @@ ban-relative-imports = "all"
 # Workspace packages live in per-package src/ trees, so ruff cannot infer they are ours. Declaring them
 # keeps the intended three-block grouping: stdlib, third-party, then nexus.
 known-first-party = [
+    "nexus_a1",
     "nexus_agent",
     "nexus_baselines",
     "nexus_config",

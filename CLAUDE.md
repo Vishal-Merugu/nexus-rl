@@ -87,6 +87,7 @@ Polyglot **uv workspace** (Python) + a single **pnpm** app (dashboard):
 - **`nexus-baselines`** — non-learned allocators (static, round-robin, greedy-throughput). The comparison floor.
 - **`nexus-rl`** — Stable-Baselines3 training/eval harness, config loading, run artifacts.
 - **`nexus-types`** — pydantic contracts crossing service boundaries (`NetworkState`, `Action`, `ConstraintSet`).
+- **`nexus-a1`** — the A1 interface contract: versioned policy documents the outer tier (rApp) issues to the inner tier (xApp), their validation against the live network, and translation into constraints. Pure pydantic — no simulator, no numpy. See ADR-0008.
 - **`nexus-errors`** — `NexusError` hierarchy. Every raised error subclasses it.
 - **`nexus-config`** — `pydantic-settings` app config. The only place env vars are read.
 - **`nexus-telemetry`** — structured logging + run-metric emission.

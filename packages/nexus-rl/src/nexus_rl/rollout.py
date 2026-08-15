@@ -21,8 +21,13 @@ from nexus_sim.simulator import NetworkSimulator
 from nexus_types.action import AllocationAction
 from nexus_types.network_state import NetworkState
 
-PolicyPredictor = Callable[[NDArray[np.float32]], AllocationAction]
-"""Maps an encoded observation to an allocation. Wraps a trained policy plus its action decoder."""
+PolicyPredictor = Callable[[NDArray[np.float32], NetworkState], AllocationAction]
+"""Maps an encoded observation plus the state it came from to an allocation.
+
+The state is passed alongside the observation because decoding needs it: a discrete mode resolves to
+per-flow shares using the flows' traffic classes, and a rerouting mode picks paths out of each flow's
+``candidate_paths``. Neither survives observation encoding. Handing the decoder the state it was encoded
+from is also what keeps the controller and the evaluator decoding identically — see ADR-0006."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,7 +104,7 @@ def rollout_policy(
     return _rollout(
         simulator=simulator,
         label=label,
-        act=lambda state: predictor(encode_observation(state)),
+        act=lambda state: predictor(encode_observation(state), state),
         steps=steps,
         seed=seed,
         traffic_pattern=traffic_pattern,

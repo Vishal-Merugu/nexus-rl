@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from nexus_baselines.allocator import StaticAllocator, build_baseline
 from nexus_errors.config_error import ConfigurationError
@@ -10,6 +11,7 @@ from nexus_rl.evaluate import MINIMUM_SEEDS, evaluate_baseline, render_compariso
 from nexus_rl.rollout import rollout_allocator, rollout_policy
 from nexus_sim.simulator import NetworkSimulator
 from nexus_types.action import AllocationAction
+from nexus_types.network_state import NetworkState
 
 
 def _simulator(pattern: str = "steady", seed: int = 1) -> NetworkSimulator:
@@ -72,9 +74,9 @@ def test_a_policy_and_a_baseline_run_through_the_same_path() -> None:
         for flow in simulator.flows
     )
 
-    def always_open(observation: np.ndarray) -> AllocationAction:
+    def always_open(observation: NDArray[np.float32], state: NetworkState) -> AllocationAction:
         del observation
-        return decode_discrete_action(AllocationMode.OPEN, simulator.state, routing)
+        return decode_discrete_action(AllocationMode.OPEN, state, routing)
 
     summary = rollout_policy(
         simulator, always_open, steps=15, seed=1, traffic_pattern="steady", label="fixed-policy"
@@ -99,9 +101,9 @@ def test_a_throttling_policy_carries_less_traffic_than_an_open_one() -> None:
         for flow in throttled.flows
     )
 
-    def aggressive(observation: np.ndarray) -> AllocationAction:
+    def aggressive(observation: NDArray[np.float32], state: NetworkState) -> AllocationAction:
         del observation
-        return decode_discrete_action(AllocationMode.THROTTLE_AGGRESSIVE, throttled.state, routing)
+        return decode_discrete_action(AllocationMode.THROTTLE_AGGRESSIVE, state, routing)
 
     throttled_summary = rollout_policy(throttled, aggressive, steps=30, seed=1, traffic_pattern="steady")
 

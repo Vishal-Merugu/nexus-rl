@@ -322,3 +322,111 @@ from. A run nobody can find is a run that did not happen.
   `force-include` grafts a stray top-level `src/` into the wheel.
 - `ruff format` reflows `# noqa` comments across lines, which silently breaks string-replacement edits
   targeting them. Re-read after formatting.
+
+---
+
+## Gates that have never run (added after the first real toolchain install)
+
+### A gate that has never executed is not a gate
+
+`uv`, `pnpm` and `docker` were absent while the repo was written, so `make` had never run once. The tree
+looked finished — 362 passing tests, lint clean — and hid: a uv workspace that could not resolve at all
+(root project and `packages/nexus-rl` shared a name), 82 `mypy --strict` errors, an MCP server that
+raised on import against its own resolved dependency, and a `lint` script pointing at an eslint config
+that did not exist.
+
+**Why:** "written but never executed" is indistinguishable from "broken" until something runs it. The
+green tests were real but covered only the paths that did not need the missing tools.
+
+**Apply:** install the toolchain first, run every documented command once, and treat the first run of any
+gate as a source of findings rather than a formality.
+
+### Pin the major of a dependency whose API you are built on
+
+`mcp>=1.2` resolved to 2.0.0, which removed the lowlevel `@server.list_tools()` decorators the agent
+layer is built on. `build_server()` raised `AttributeError` on import; the service could not start.
+
+**Why:** an unbounded lower bound is a promise that every future major stays compatible. It also went
+unnoticed because no test constructed the server — 362 tests passed while the entry point was dead.
+
+**Apply:** if a module is written against a library's specific API shape, bound the major. And test the
+*assembly* of every service, not only its parts.
+
+### mypy's `disallow_any_explicit` is unusable with pydantic
+
+pydantic's own `BaseModel` signature contains `Any`, and mypy attributes it to the **subclass definition
+line**. Every contract model in `nexus-types` therefore failed a rule none of its source violated — 28 of
+the 82 errors.
+
+**Why:** the setting reads library code, not just ours. The project rule ("never use `Any`") belongs
+where it can see only our source: ruff `ANN401` plus the `block-any-type` hookify rule.
+
+### An annotation that contradicts the endpoint makes the guard dead code
+
+`OrchestratorClient._request` was typed `dict[str, object]`, but `/history`, `/incidents` and
+`/decisions` return JSON arrays. The callers' own `isinstance(payload, list)` checks were statically
+unreachable — mypy had been reporting a real contradiction, and the code only worked because nothing
+type-checked it.
+
+**Apply:** when a narrowing guard reads as unreachable, suspect the annotation before the guard.
+
+### Validate into a typed model, then keep the type
+
+`validate_arguments` produced a validated pydantic model and immediately `model_dump()`ed it back to a
+raw dict, so every handler re-coerced fields out of `object` — ten `type: ignore`s to compile something
+validation had already established. Making `ToolSpec` generic in its input model, behind a non-generic
+protocol so the registry stays homogeneous, removed all ten.
+
+**Why:** discarding types at the exact moment you have earned them is how `Any` re-enters a codebase that
+bans it.
+
+---
+
+## Results (added after the first end-to-end training run)
+
+### A tool that cannot produce the project's central claim is the bug
+
+`nexus-eval --run-id <id>` validated the checkpoint's MDP version, logged the run's metadata, and then
+compared the three baselines against one another. The policy was never rolled out. `rollout_policy`
+existed, was tested, and was called by nothing.
+
+**Why:** the whole point of the evaluator is "does the learned controller beat the floor". Every
+individual piece worked; the wiring between them did not exist, and no test asserted the end-to-end
+claim.
+
+**Apply:** for each headline claim the project makes, there should be one test that fails if the claim
+can no longer be produced.
+
+### Evaluate on the run's own configuration, never the tool's defaults
+
+The evaluator scored policies on its default `mesh-6` / `diurnal` + `flash_crowd` regardless of what the
+run recorded. A policy trained on a different topology or flow count would have been compared against a
+different problem and the number reported as if it meant something.
+
+**Apply:** read `topology`, `flow_count` and `evaluation_patterns` from the run artifact, and **raise**
+when they are missing rather than defaulting.
+
+---
+
+## A1 / O-RAN (added in Stage H)
+
+### An interface needs a decision, not just an acknowledgement
+
+The v1 constraint endpoint could accept or raise. It could not say "two of those three links exist" or
+"that floor exceeds total capacity, here is what is achievable". Partial acceptance is a *distinct*
+state: collapsing it into success lets "avoid these six links, four of which are fictional" report as a
+complete success.
+
+**Apply:** every A1 decision carries a status, an operator-facing reason, the enforced and rejected
+elements, and an achievable alternative where one exists.
+
+### Translate the decision, not the request
+
+A partially-accepted policy must enforce only what the xApp agreed to. Translating the original request
+would apply guidance the operator was explicitly told had been refused — worse than either accepting or
+rejecting outright.
+
+### A refusal is a 200, not a 4xx
+
+The negotiation is the protocol. Encoding a refusal as a transport error invites the agent layer to treat
+it as a failed call and retry, instead of relaying what the xApp actually said.

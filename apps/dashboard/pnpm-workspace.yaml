@@ -1,0 +1,8 @@
+# pnpm 10+ blocks dependency build scripts unless they are approved here, and `pnpm install` exits
+# non-zero while any are pending — which fails `make install` and CI before a single test runs.
+#
+# esbuild is vite's bundler; its build script selects the platform-native binary. Nothing else in this
+# app needs one, and the list stays explicit so a new build script is a visible decision rather than a
+# silent grant.
+allowBuilds:
+  esbuild: true

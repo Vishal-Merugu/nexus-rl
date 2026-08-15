@@ -1,0 +1,32 @@
+# Simulation parameters, separated from the images so a demo can be reconfigured without a rebuild.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-config
+  labels:
+    app.kubernetes.io/part-of: nexus-rl
+data:
+  NEXUS_ENV: "production"
+  NEXUS_LOG_LEVEL: "INFO"
+  NEXUS_SEED: "1337"
+  NEXUS_TOPOLOGY: "mesh-6"
+  NEXUS_SIMULATOR_URL: "http://nexus-simulator:8000"
+  NEXUS_CONTROLLER_URL: "http://nexus-controller:8001"
+  # Provider-agnostic (ADR-0005). Point at an in-cluster Ollama, or any OpenAI-compatible endpoint.
+  NEXUS_LLM_BASE_URL: "http://ollama:11434/v1"
+  NEXUS_LLM_MODEL: "qwen2.5:7b"
+---
+# Secrets are injected at runtime, never baked into an image or committed here.
+# Create with:
+#   kubectl create secret generic nexus-secrets \
+#     --from-literal=NEXUS_API_KEY=<key> --from-literal=NEXUS_LLM_API_KEY=<key-or-empty>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nexus-secrets
+  labels:
+    app.kubernetes.io/part-of: nexus-rl
+type: Opaque
+stringData:
+  NEXUS_API_KEY: ""
+  NEXUS_LLM_API_KEY: ""

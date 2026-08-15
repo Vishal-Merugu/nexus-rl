@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Run artifacts — never commit checkpoints or metrics dumps.
+# Preserve numbers in docs/evaluation/results.md instead.
+experiments/runs/*
+!experiments/runs/.gitkeep
+*.zip
+*.pt
+*.ckpt
+tensorboard/
+
+# Secrets
+.env
+.env.local
+*.pem
+
+# Editors / OS
+.DS_Store
+.idea/
+*.swp
+
+# Claude local overrides
+.claude/settings.local.json

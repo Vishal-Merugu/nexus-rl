@@ -1,0 +1,64 @@
+# Shared base for the Python services.
+#
+# Multi-stage so the dependency layer caches independently of source. The service is selected at build
+# time via SERVICE_PATH, and the heavy `train`/`policy` extras are opt-in — the simulator and agent layer
+# never carry torch, which keeps those images an order of magnitude smaller.
+
+FROM python:3.12-slim AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PATH="/app/.venv/bin:$PATH"
+
+COPY --from=ghcr.io/astral-sh/uv:0.5.14 /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# --- Dependency layer -------------------------------------------------------------------------------
+# Manifests only: this layer rebuilds when dependencies change, not when source does.
+FROM base AS deps
+
+ARG EXTRAS=""
+
+COPY pyproject.toml uv.lock* ./
+COPY packages/nexus-errors/pyproject.toml packages/nexus-errors/
+COPY packages/nexus-types/pyproject.toml packages/nexus-types/
+COPY packages/nexus-config/pyproject.toml packages/nexus-config/
+COPY packages/nexus-telemetry/pyproject.toml packages/nexus-telemetry/
+COPY packages/nexus-sim/pyproject.toml packages/nexus-sim/
+COPY packages/nexus-baselines/pyproject.toml packages/nexus-baselines/
+COPY packages/nexus-mdp/pyproject.toml packages/nexus-mdp/
+COPY packages/nexus-env/pyproject.toml packages/nexus-env/
+COPY packages/nexus-rl/pyproject.toml packages/nexus-rl/
+COPY apps/simulator/pyproject.toml apps/simulator/
+COPY apps/controller/pyproject.toml apps/controller/
+COPY apps/agent-layer/pyproject.toml apps/agent-layer/
+
+RUN uv sync --all-packages --no-install-workspace ${EXTRAS:+--extra $EXTRAS}
+
+# --- Runtime ----------------------------------------------------------------------------------------
+FROM base AS runtime
+
+ARG SERVICE_PATH
+ARG EXTRAS=""
+
+COPY --from=deps /app/.venv /app/.venv
+COPY pyproject.toml ./
+COPY packages/ packages/
+COPY apps/ apps/
+
+RUN uv sync --all-packages --frozen ${EXTRAS:+--extra $EXTRAS}
+
+# Non-root: nothing here needs privileges, and a container that cannot write outside its workdir fails
+# more obviously when something tries.
+RUN useradd --create-home --uid 10001 nexus && chown -R nexus:nexus /app
+USER nexus
+
+# Install only the requested service's entry points. The arg selects what the image is *for*; each
+# compose/K8s definition still passes its own command.
+RUN test -n "${SERVICE_PATH}" || (echo "SERVICE_PATH build arg is required" >&2; exit 1)
+LABEL org.opencontainers.image.title="nexus-rl/${SERVICE_PATH}"
+
+EXPOSE 8000

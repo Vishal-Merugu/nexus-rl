@@ -1,0 +1,35 @@
+# Stage B: the first real policy. Discrete allocation modes, DQN (ADR-0004).
+#
+# Trained on `diurnal`; `flash_crowd` and `bursty` are held out so generalisation can actually be
+# measured rather than assumed.
+name: dqn-discrete-baseline
+algorithm: dqn
+seed: 0
+total_timesteps: 300000
+
+topology: mesh-6
+traffic_pattern: diurnal
+flow_count: 8
+episode_length: 512
+action_mode: discrete
+
+hyperparameters:
+  learning_rate: 0.0003
+  buffer_size: 100000
+  learning_starts: 5000
+  batch_size: 128
+  # Roughly one episode of transitions between target syncs — frequent enough to track a moving
+  # objective, slow enough not to chase noise.
+  target_update_interval: 500
+  train_freq: 4
+  gradient_steps: 1
+  # Long exploration: the useful modes (reroute, shed-background) only pay off under congestion, which
+  # a fast-decaying epsilon may never sample.
+  exploration_fraction: 0.4
+  exploration_final_eps: 0.05
+  gamma: 0.99
+
+evaluation_patterns:
+  - diurnal
+  - flash_crowd
+  - bursty

@@ -1,0 +1,148 @@
+# Runs on every PR. Fast and parallel — a slow gate is a gate people learn to skip.
+#
+# Training never runs here: it is slow, non-deterministic in wall-clock, and proves nothing that the
+# environment contract tests do not already prove.
+
+name: 🔍 PR - Run Checks
+
+on:
+  pull_request:
+  merge_group:
+
+env:
+  PYTHON_VERSION: '3.12'
+  NODE_VERSION: '22'
+  UV_VERSION: '0.5.14'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: 🧹 PR - Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+
+      - name: 🐍 Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: 📚 Install workspace
+        run: uv sync --all-packages
+
+      - name: 🧹 Run ruff
+        run: uv run ruff check .
+
+      - name: 🎨 Check formatting
+        run: uv run ruff format --check .
+
+  types:
+    name: 🔎 PR - Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+
+      - name: 🐍 Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: 📚 Install workspace
+        run: uv sync --all-packages
+
+      # Unscoped on purpose: cross-package type errors are exactly what this catches.
+      - name: 🔎 Run mypy
+        run: uv run mypy packages apps
+
+  test:
+    name: 🧪 PR - Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 📦 Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: '**/pyproject.toml'
+
+      - name: 🐍 Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: 📚 Install workspace
+        run: uv sync --all-packages
+
+      - name: 🧪 Run pytest
+        run: uv run pytest packages apps -q
+
+      # Called out separately so a determinism break is legible in the checks list rather than buried in
+      # a suite summary. A failure here is CRITICAL regardless of what else passes.
+      - name: 🎲 Verify determinism
+        run: uv run pytest packages/nexus-sim/tests/test_determinism.py -q
+
+  dashboard:
+    name: 🖥️ PR - Dashboard Build & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/dashboard/package.json
+
+      - name: 📦 Install dependencies
+        working-directory: apps/dashboard
+        run: npm install
+
+      - name: 🧪 Run tests
+        working-directory: apps/dashboard
+        run: npm run test
+
+      - name: 🏗️ Build
+        working-directory: apps/dashboard
+        run: npm run build
+
+  images:
+    name: 🐳 PR - Build Images
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [simulator, controller, agent-layer]
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build only — a PR proves the image assembles; publishing happens on merge.
+      - name: 🏗️ Build ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .docker/Dockerfile.python
+          build-args: SERVICE_PATH=apps/${{ matrix.service }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}

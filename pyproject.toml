@@ -1,0 +1,133 @@
+[project]
+# The workspace umbrella, not a library. Named distinctly from the `nexus-rl` training harness in
+# packages/ — uv rejects a workspace whose root shares a name with one of its members.
+name = "nexus-rl-workspace"
+version = "0.1.0"
+description = "Autonomous network resource orchestration with reinforcement learning and an LLM agent layer"
+requires-python = ">=3.12"
+readme = "README.md"
+
+dependencies = [
+    "nexus-config",
+    "nexus-errors",
+    "nexus-telemetry",
+    "nexus-types",
+    "nexus-sim",
+    "nexus-baselines",
+    "nexus-mdp",
+    "nexus-env",
+    "nexus-rl",
+    "nexus-simulator",
+    "nexus-controller",
+    "nexus-agent",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.14",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "httpx>=0.28",
+    "types-PyYAML>=6.0",
+]
+
+[tool.uv.workspace]
+members = ["packages/*", "apps/simulator", "apps/controller", "apps/agent-layer"]
+
+[tool.uv.sources]
+nexus-config = { workspace = true }
+nexus-errors = { workspace = true }
+nexus-telemetry = { workspace = true }
+nexus-types = { workspace = true }
+nexus-sim = { workspace = true }
+nexus-baselines = { workspace = true }
+nexus-mdp = { workspace = true }
+nexus-env = { workspace = true }
+nexus-rl = { workspace = true }
+nexus-simulator = { workspace = true }
+nexus-controller = { workspace = true }
+nexus-agent = { workspace = true }
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = ["experiments/runs", ".venv"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # bugbear
+    "C4",     # comprehensions
+    "SIM",    # simplify
+    "RUF",    # ruff-specific
+    "ANN",    # annotations — every signature typed
+    "NPY",    # numpy-specific (catches legacy np.random usage)
+    "PT",     # pytest style
+    "RET",    # return simplification
+    "ARG",    # unused arguments
+    "PTH",    # pathlib over os.path
+    "TID",    # tidy imports — no relative parent imports
+    "T20",    # no print()
+]
+ignore = [
+    "B008",    # FastAPI Depends() in defaults is idiomatic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["ARG001"]  # pytest fixtures are legitimately "unused" arguments
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+# Workspace packages live in per-package src/ trees, so ruff cannot infer they are ours. Declaring them
+# keeps the intended three-block grouping: stdlib, third-party, then nexus.
+known-first-party = [
+    "nexus_agent",
+    "nexus_baselines",
+    "nexus_config",
+    "nexus_controller",
+    "nexus_env",
+    "nexus_mdp",
+    "nexus_errors",
+    "nexus_rl",
+    "nexus_sim",
+    "nexus_simulator",
+    "nexus_telemetry",
+    "nexus_types",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_unused_ignores = true
+# `disallow_any_explicit` is deliberately NOT set. pydantic's own `BaseModel` signature contains `Any`,
+# and mypy attributes that to the *subclass* definition line — so every contract model in nexus-types
+# fails a rule none of its source violates. The no-`Any` rule is enforced where it can read our code and
+# only our code: ruff ANN401 plus the `block-any-type` hookify rule.
+disallow_any_generics = true
+no_implicit_reexport = true
+plugins = ["pydantic.mypy"]
+exclude = ["experiments/runs", "\\.venv"]
+
+[[tool.mypy.overrides]]
+# Third-party packages without complete stubs. Narrowly scoped on purpose —
+# do not widen this list to silence errors in our own code.
+module = ["stable_baselines3.*", "gymnasium.*", "networkx.*", "mcp.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["packages", "apps"]
+python_files = ["test_*.py"]
+addopts = "-q --strict-markers"
+filterwarnings = ["error::RuntimeWarning"]
+
+[tool.coverage.run]
+branch = true
+omit = ["*/tests/*"]

@@ -1,0 +1,32 @@
+# Stage G: continuous per-flow allocation with PPO (ADR-0004).
+#
+# The point of comparison against dqn-discrete-baseline: same environment, same seeds, same baselines.
+# A discrete mode set cannot express a 60/40 split, so this should reach allocations DQN structurally
+# cannot — if it does not, that is a finding worth reporting, not a run to hide.
+name: ppo-continuous
+algorithm: ppo
+seed: 0
+total_timesteps: 500000
+
+topology: mesh-6
+traffic_pattern: diurnal
+flow_count: 8
+episode_length: 512
+action_mode: continuous
+
+hyperparameters:
+  learning_rate: 0.0003
+  n_steps: 2048
+  batch_size: 128
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  # Non-zero: allocation has many near-equivalent actions, and premature determinism collapses onto a
+  # mediocre one that then looks like convergence.
+  ent_coef: 0.005
+
+evaluation_patterns:
+  - diurnal
+  - flash_crowd
+  - bursty

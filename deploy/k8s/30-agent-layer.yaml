@@ -1,0 +1,36 @@
+# The agent layer is stateless, so it is the one component that genuinely scales horizontally.
+# That difference in scaling profile is why these are separate services at all.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-agent-layer
+  labels:
+    app.kubernetes.io/name: agent-layer
+    app.kubernetes.io/part-of: nexus-rl
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent-layer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent-layer
+    spec:
+      containers:
+        - name: agent-layer
+          image: nexus-rl/agent-layer:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["nexus-agent-server"]
+          envFrom:
+            - configMapRef:
+                name: nexus-config
+            - secretRef:
+                name: nexus-secrets
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

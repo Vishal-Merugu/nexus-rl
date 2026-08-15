@@ -1,0 +1,24 @@
+# Smoke run. Minutes, not hours. Proves the pipeline before anything long is launched:
+# reward components non-zero, no NaN, checkpoint writes, step rate sane.
+name: dqn-smoke
+algorithm: dqn
+seed: 0
+total_timesteps: 2000
+
+topology: mesh-6
+traffic_pattern: steady
+flow_count: 8
+episode_length: 128
+action_mode: discrete
+
+hyperparameters:
+  learning_rate: 0.0005
+  buffer_size: 10000
+  learning_starts: 500
+  batch_size: 64
+  target_update_interval: 250
+  exploration_fraction: 0.3
+
+evaluation_patterns:
+  - steady
+  - bursty

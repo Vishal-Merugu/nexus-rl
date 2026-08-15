@@ -1,0 +1,20 @@
+# The comparison matrix `make evaluate` runs.
+#
+# Every policy is measured against every baseline, on every pattern, across seeds. Numbers below the
+# seed floor are labelled "not a result" in the generated report rather than quietly published.
+name: evaluation-matrix
+algorithm: dqn
+seed: 0
+total_timesteps: 1
+
+topology: mesh-6
+traffic_pattern: diurnal
+flow_count: 8
+episode_length: 512
+action_mode: discrete
+
+evaluation_patterns:
+  - steady
+  - diurnal
+  - bursty
+  - flash_crowd

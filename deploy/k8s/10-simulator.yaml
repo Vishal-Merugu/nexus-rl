@@ -1,0 +1,69 @@
+# The simulator is the single writer of simulation state, so it is a singleton by design.
+# Scaling it would create two independent timelines, not more capacity.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-simulator
+  labels:
+    app.kubernetes.io/name: simulator
+    app.kubernetes.io/part-of: nexus-rl
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, not RollingUpdate: two simulators briefly coexisting would each hold their own state.
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: simulator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: simulator
+    spec:
+      containers:
+        - name: simulator
+          image: nexus-rl/simulator:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["uvicorn", "nexus_simulator.main:app", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: nexus-config
+            - secretRef:
+                name: nexus-secrets
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          # Readiness and liveness are distinguished deliberately: a starting simulator is not-ready,
+          # not dead. Conflating them produces a restart loop that looks like a crash.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nexus-simulator
+spec:
+  # ClusterIP: only the dashboard is externally reachable.
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: simulator
+  ports:
+    - port: 8000
+      targetPort: 8000

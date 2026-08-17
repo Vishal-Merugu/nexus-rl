@@ -43,7 +43,7 @@ def test_every_declared_tool_is_reachable_through_the_server() -> None:
     # The decorators register handlers on the server; if the MCP surface shifts again, this fails here
     # rather than at the first operator question.
     assert server.request_handlers, "no MCP request handlers registered"
-    assert len(specs) == 11
+    assert len(specs) == 13
 
 
 @pytest.mark.anyio

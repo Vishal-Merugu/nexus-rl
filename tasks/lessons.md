@@ -322,6 +322,12 @@ from. A run nobody can find is a run that did not happen.
   `force-include` grafts a stray top-level `src/` into the wheel.
 - `ruff format` reflows `# noqa` comments across lines, which silently breaks string-replacement edits
   targeting them. Re-read after formatting.
+- **Never bare `uv sync`.** It resolves the root project only and *uninstalls* the rest of the workspace —
+  `stable-baselines3` disappeared, which made `mypy` report an unrelated `unused-ignore` in `train.py` and
+  looked exactly like a real regression in code nothing had touched. `make install`
+  (`uv sync --all-packages --all-extras`) is the only correct sync.
+- When a gate fails in a file your change never touched, check the environment before the code. Stash and
+  re-run against a clean HEAD: if it fails there too, it is not your diff.
 
 ---
 
@@ -430,3 +436,143 @@ rejecting outright.
 
 The negotiation is the protocol. Encoding a refusal as a transport error invites the agent layer to treat
 it as a failed call and retry, instead of relaying what the xApp actually said.
+
+### An interface with no client is not built
+
+Stage H shipped `nexus-a1`, the xApp's `/a1/*` routes, 35 tests and an ADR — and the agent layer went on
+POSTing `Constraint` documents to `/constraints`. Every advertised capability worked; nothing reached it.
+Partial acceptance, refusal-with-alternative, the achievable alternative — all unreachable from an
+operator, which is the only place they have any value.
+
+**Why:** this is "a contract field nobody reads is a lie" one level up. The consumer side is the easy half
+to test in isolation and the easy half to mistake for the whole feature.
+
+**Apply:** a boundary is finished when something on the *other* side calls it. Land the producer in the
+same change, and write one test that fails if the old path comes back — here, "no write tool touches
+`/constraints`".
+
+### Test the two tiers against each other, not against a mock
+
+Every agent-layer test handed the tools a hand-written controller response. That proves the rApp behaves
+correctly given a decision; it cannot prove the two sides agree on URL shape, field names, or enum
+spellings — a mock agrees with whatever it was written to agree with.
+
+**Apply:** for a contract between services, drive the real client over ASGI into the real app
+(`apps/agent-layer/tests/test_a1_round_trip.py`) and assert on what is *enforced*, not what was returned.
+Then break the mapping on purpose and confirm a test fails; one that survives a deliberate bug was never
+testing the claim.
+
+---
+
+## Guardrails (added in Stages K–L)
+
+### A validator is not a guardrail
+
+`AllocationAction` rejects shares outside [0, 1] and non-finite values in its own model validator. So
+anything holding an `AllocationAction` is holding an action already proven fine — a safety check placed
+there inspects only actions that could not be wrong. Worse, the rejection happened as a *parse error* in
+the simulator's control loop, which caught it, logged one line, and stepped with no action at all: every
+flow at full demand, an unmanaged network that looked managed.
+
+**Why:** a type boundary rejects bad values by refusing to exist. A behavioural guardrail has to *see* the
+bad value to name it. The two are not substitutes.
+
+**Apply:** the supervisor parses the controller's response leniently into `ProposedAction`, checks it, and
+emits a validated `AllocationAction`. Inspect raw, emit trusted.
+
+### Correct where correction is unambiguous; fall back where it is not
+
+Clamping 1.9 to 1.0 preserves the policy's evident intent. There is no equivalent repair for a NaN — 0.0
+starves the flow, 1.0 floods it, and both are inventions. Guessing there turns the guardrail into a
+second, unaccountable policy.
+
+**Apply:** an omitted flow is held at its current rate, never zeroed. Absent is an omission; zero is a
+decision.
+
+### Hysteresis, or the guardrail becomes an oscillator
+
+The fallback engages because a metric breached, and then *fixes that metric*. Releasing as soon as things
+look healthy hands the policy back the network it just broke. Release needs a longer run of healthy steps
+than engagement needed breaching ones.
+
+**Apply:** any automatic revert-and-restore. Engage fast on unrepairable failures, slowly on noisy ones,
+and always release slowly.
+
+### A fallback action must never wear the policy's name
+
+Relabelling a baseline allocation as `controller` makes the dashboard, the decision log and the agent
+layer's explanations all attribute the baseline's behaviour to the policy. It carries
+`supervisor:fallback`.
+
+### Shadow mode measures readiness, never superiority
+
+The candidate's actions were never applied, so the network never responded to them and there is no
+counterfactual latency to compare. What it can honestly say: would it have been safe, is it responsive, is
+it meaningfully different. Which policy is *better* is the offline evaluation suite's verdict, where both
+were really applied.
+
+**Apply:** enforce "never applied" structurally — no code path from the shadow proposal to the returned
+action — and test it with a value nothing else would produce.
+
+### Randomizing the environment must not cost determinism
+
+Domain randomization varies the network per episode so the policy learns a distribution. Every draw still
+comes from an explicitly passed `Generator`, so `(seed, domain)` fully determines the trajectory. And it
+is opt-in: `IDENTITY_DOMAIN` by default, because a mode that could silently be on would invalidate every
+result recorded before it existed.
+
+**Apply:** also randomize the *conditions*, never the *problem* — the flow set is built from the nominal
+topology so two episodes stay comparable.
+
+### `uv sync` alone prunes the workspace
+
+Repeated from Tooling notes because it cost time twice: bare `uv sync` uninstalls the rest of the
+workspace and makes `mypy` report errors in files nothing touched. Always `make install`.
+
+---
+
+## Slicing and multi-agent (added in Stage J)
+
+### A per-slice measure that gets averaged is an aggregate again
+
+Mean latency across slices lets a large, fast best-effort slice mask a breached premium one — the exact
+blindness slicing exists to remove. `attainment_summary` reports each slice and the count met, and
+deliberately reports no mean.
+
+**Apply:** when adding differentiated guarantees, check that no downstream consumer collapses them.
+
+### An SLA is a conjunction; a reward needs a gradient
+
+Both, and they are not in tension. `is_met` is all-terms-hold, because an SLA that is "mostly met" is
+broken. `headroom` is the *minimum* term's distance from its limit, because a met/unmet step function
+tells the policy nothing about whether it is getting warmer — which is how a policy settles just past a
+limit it could cheaply have cleared.
+
+### Weight the priority, and never to zero
+
+An unweighted mean over slices lets the policy satisfy two cheap best-effort slices and abandon premium —
+strictly worse, scores better. Weighting by `priority + 1` fixes it; weighting by `priority` alone would
+make best-effort worth zero, which is permission to starve it.
+
+### "Decentralized" is a claim the code must support
+
+The easy fake is to hand every agent the global observation with other agents' entries zeroed: the vector
+is globally shaped, the tests pass, the reward improves, and the CTDE result means nothing. There is no
+symptom to notice later.
+
+**Apply:** the load-bearing test is the negative one — an agent's local observation must not change when
+another agent's flows change. `packages/nexus-mdp/tests/test_multi_agent.py`.
+
+### Reward-only changes still bump MDP_VERSION
+
+Adding `sla_attainment_reward` left the observation and action space untouched. It is still a bump: a
+version-1 policy optimised a different objective, so its numbers answer a different question. The bump
+records *what* changed and *which runs* it invalidates, in `nexus_mdp/version.py`.
+
+### Write to the repo, not next to it
+
+A `Write` with a path missing the repo root created `/Users/vishal/Documents/Repos/nexus-mdp/` — a stray
+tree one directory up, outside git, invisible to every gate.
+
+**Apply:** absolute paths for new files start with the project root. Check `git status` after creating
+files in a package that shares a name with a directory prefix.

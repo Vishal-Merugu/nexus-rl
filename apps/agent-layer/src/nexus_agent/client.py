@@ -26,7 +26,13 @@ accepts only scalars here, and widening it would push the error to the wire inst
 
 
 class OrchestratorClient:
-    """Reads simulator and controller state; writes constraints to the controller."""
+    """Reads simulator and xApp state; issues A1 policies to the xApp.
+
+    The only write path is ``/a1/*``. The controller's ``POST /constraints`` endpoint still exists for
+    direct operator use, but nothing here calls it: a constraint written straight to the controller skips
+    feasibility validation and returns no decision, which is precisely the negotiation ADR-0008 exists to
+    make possible.
+    """
 
     def __init__(
         self,
@@ -76,31 +82,43 @@ class OrchestratorClient:
             f"{self._controller_url}/constraints", "active constraints", params={"timestep": timestep}
         )
 
-    async def post_constraint(
-        self, constraint: dict[str, object], current_timestep: int
-    ) -> dict[str, object]:
-        """Write a constraint. The only write the agent layer has."""
-        return await self._post(
-            f"{self._controller_url}/constraints",
-            constraint,
-            "apply constraint",
-            params={"current_timestep": current_timestep},
+    async def get_a1_policy_types(self) -> dict[str, object]:
+        """What the xApp advertises it can enforce, and the A1 schema version it speaks."""
+        return await self._get(f"{self._controller_url}/a1/policytypes", "advertised A1 policy types")
+
+    async def get_a1_policies(self, timestep: int) -> list[dict[str, object]]:
+        payload = await self._request(
+            "GET",
+            f"{self._controller_url}/a1/policies",
+            "A1 policies in force",
+            params={"timestep": timestep},
+        )
+        return _expect_list_of_mappings(payload, "A1 policies in force")
+
+    async def put_a1_policy(self, policy_id: str, document: dict[str, object]) -> dict[str, object]:
+        """Offer a policy to the xApp and return its decision. The only write the agent layer has.
+
+        A refusal comes back as a 200 carrying a REJECTED decision, so it does not raise here. Only a
+        transport or shape failure does — see ADR-0008.
+        """
+        return await self._put(
+            f"{self._controller_url}/a1/policies/{policy_id}", document, "offer an A1 policy"
         )
 
-    async def revoke_constraint(self, constraint_id: str) -> dict[str, object]:
-        return await self._delete(f"{self._controller_url}/constraints/{constraint_id}", "revoke constraint")
+    async def delete_a1_policy(self, policy_id: str) -> dict[str, object]:
+        return await self._delete(f"{self._controller_url}/a1/policies/{policy_id}", "withdraw an A1 policy")
 
     async def _get(self, url: str, description: str, params: QueryParams | None = None) -> dict[str, object]:
         return _expect_mapping(await self._request("GET", url, description, params=params), description)
 
-    async def _post(
+    async def _put(
         self,
         url: str,
         payload: dict[str, object],
         description: str,
         params: QueryParams | None = None,
     ) -> dict[str, object]:
-        response = await self._request("POST", url, description, json=payload, params=params)
+        response = await self._request("PUT", url, description, json=payload, params=params)
         return _expect_mapping(response, description)
 
     async def _delete(self, url: str, description: str) -> dict[str, object]:

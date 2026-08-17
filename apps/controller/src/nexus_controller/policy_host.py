@@ -50,11 +50,14 @@ class PolicyHost:
     def has_trained_policy(self) -> bool:
         return self._model is not None
 
-    def load(self, checkpoint: Path, algorithm: str = "dqn") -> None:
+    def load(self, checkpoint: Path, algorithm: str = "dqn", label: str | None = None) -> None:
         """Load a checkpoint, or leave the fallback in place and say why.
 
         A failed load is logged and survived rather than fatal: a controller that refuses to start because
         of a stale checkpoint takes the whole demo with it, when running unmanaged would have been fine.
+
+        ``label`` is what ``/health`` reports. A registry-resolved policy passes its version id, so the
+        answer to "what is running" is something that can be looked up rather than a file stem.
         """
         try:
             from stable_baselines3 import DQN, PPO
@@ -70,13 +73,18 @@ class PolicyHost:
 
         loader = DQN if algorithm == "dqn" else PPO
         self._model = loader.load(checkpoint)
-        self._policy_label = f"{algorithm}:{checkpoint.stem}@mdp{MDP_VERSION}"
+        self._policy_label = label or f"{algorithm}:{checkpoint.stem}@mdp{MDP_VERSION}"
         _telemetry.info(
             "Policy loaded",
-            {"checkpoint": str(checkpoint), "algorithm": algorithm, "mdp_version": MDP_VERSION},
+            {
+                "checkpoint": str(checkpoint),
+                "algorithm": algorithm,
+                "mdp_version": MDP_VERSION,
+                "policy": self._policy_label,
+            },
         )
 
-    def try_load(self, checkpoint: Path | None, algorithm: str = "dqn") -> None:
+    def try_load(self, checkpoint: Path | None, algorithm: str = "dqn", label: str | None = None) -> None:
         """Load if configured; fall back loudly on failure."""
         if checkpoint is None:
             _telemetry.info(
@@ -86,7 +94,7 @@ class PolicyHost:
             )
             return
         try:
-            self.load(checkpoint, algorithm)
+            self.load(checkpoint, algorithm, label)
         except PolicyLoadError as error:
             _telemetry.capture_exception(
                 error, "Checkpoint failed to load — continuing on the static baseline"

@@ -19,6 +19,10 @@ dist/
 # Preserve numbers in docs/evaluation/results.md instead.
 experiments/runs/*
 !experiments/runs/.gitkeep
+
+# experiments/registry/ is deliberately NOT ignored. It holds provenance metadata only — a few hundred
+# bytes per policy — and it is the answer to "what is deployed and where did it come from". Ignoring it
+# alongside the weights would mean that answer dies with the machine. See ADR-0009.
 *.zip
 *.pt
 *.ckpt

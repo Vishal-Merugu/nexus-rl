@@ -61,17 +61,48 @@ async def get_recent_decisions(client: OrchestratorClient, limit: int = 20) -> d
 
 
 async def get_active_constraints(client: OrchestratorClient) -> dict[str, object]:
-    """Constraints currently in force, with who issued each one, the operator utterance behind it, and when
-    it expires."""
+    """Constraints currently in force — what the controller is actually **enforcing**, with who issued each
+    one, the operator utterance behind it, and when it expires.
+
+    The enforcement view. For what was *asked for*, and what the controller agreed to, read the A1 policies
+    instead: a partially-accepted policy appears here only as the part that was accepted.
+    """
+    return await client.get_constraints(timestep=await _current_timestep(client))
+
+
+async def get_active_policies(client: OrchestratorClient) -> dict[str, object]:
+    """A1 policies currently in force, and the policy types this controller advertises it can enforce.
+
+    The guidance view: what the Non-RT tier asked for. Use it to answer "what instructions are running?",
+    to find a ``policy_id`` before withdrawing one, and to check a policy type is supported before issuing
+    it rather than discovering the limit by having it refused.
+    """
+    timestep = await _current_timestep(client)
+    policies = await client.get_a1_policies(timestep=timestep)
+    advertised = await client.get_a1_policy_types()
+    return {
+        "timestep": timestep,
+        "policies": policies,
+        "advertised_policy_types": advertised.get("policy_type_ids"),
+        "a1_schema_version": advertised.get("schema_version"),
+    }
+
+
+async def _current_timestep(client: OrchestratorClient) -> int:
+    """The simulator's timestep, or a tool error.
+
+    "Currently in force" is meaningless without it, and defaulting to 0 would report expired guidance as
+    active — the whole set, since every policy is issued at a later timestep than that.
+    """
     state = await client.get_network_state()
-    timestep = state.get("timestep", 0)
+    timestep = state.get("timestep")
     if not isinstance(timestep, int):
         raise ToolExecutionError(
             "Could not read the current timestep, so 'currently in force' cannot be determined. Say so "
-            "rather than reporting constraints as active.",
+            "rather than reporting guidance as active.",
             {"got": repr(timestep)},
         )
-    return await client.get_constraints(timestep=timestep)
+    return timestep
 
 
 async def get_active_incidents(client: OrchestratorClient) -> dict[str, object]:

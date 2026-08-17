@@ -76,11 +76,27 @@ def _ok_handler(request: httpx.Request) -> httpx.Response:
     if path == "/health":
         return httpx.Response(200, json={"policy": "baseline:static", "trained_policy_loaded": False})
     if path == "/constraints":
-        if request.method == "POST":
-            return httpx.Response(200, json={"constraint_id": "c-abc123"})
         return httpx.Response(200, json={"timestep": 42, "constraints": []})
-    if path.startswith("/constraints/"):
-        return httpx.Response(200, json={"removed": True})
+    if path == "/a1/policytypes":
+        return httpx.Response(
+            200, json={"schema_version": 1, "policy_type_ids": ["QOS_OBJECTIVE", "TRAFFIC_STEERING"]}
+        )
+    if path == "/a1/policies":
+        return httpx.Response(200, json=[])
+    if path.startswith("/a1/policies/"):
+        if request.method == "DELETE":
+            return httpx.Response(200, json={"removed": True})
+        return httpx.Response(
+            200,
+            json={
+                "policy_id": path.rsplit("/", 1)[-1],
+                "status": "ACCEPTED",
+                "reason": "Applied. Expires at timestep 342.",
+                "enforced_elements": [],
+                "rejected_elements": [],
+                "achievable_alternative": None,
+            },
+        )
     return httpx.Response(404, json={"detail": "not found"})
 
 
@@ -100,22 +116,9 @@ def test_no_write_tool_can_produce_an_allocation() -> None:
         assert spec.name not in forbidden_names
 
 
-def test_the_write_tool_surface_is_exactly_the_expected_set() -> None:
-    # A new write tool must be a deliberate act, reviewed against the authority boundary — not something
-    # that appears by accident.
-    write_names = {spec.name for spec in build_tool_specs() if spec.writes}
-
-    assert write_names == {
-        "prioritise_traffic_class",
-        "set_objective_weights",
-        "avoid_links",
-        "revoke_constraint",
-    }
-
-
 def test_every_write_tool_schema_demands_a_bounded_ttl() -> None:
     for spec in build_tool_specs():
-        if not spec.writes or spec.name == "revoke_constraint":
+        if not spec.writes or spec.name == "withdraw_policy":
             continue
         properties = spec.input_schema["properties"]
         assert "ttl_timesteps" in properties  # type: ignore[operator]
@@ -191,10 +194,14 @@ async def test_an_unreachable_service_raises_rather_than_hanging_silently() -> N
 
 
 # --- Write tools -----------------------------------------------------------------------------------
+#
+# The A1 emission path — provenance, timestep stamping, and how each decision status is relayed — is
+# covered in test_a1_emission.py. What stays here is the tool-level contract shared with the read tools.
 
 
 @pytest.mark.anyio
-async def test_prioritising_a_class_creates_an_expiring_constraint() -> None:
+async def test_an_issued_policy_reports_its_expiry_in_timesteps() -> None:
+    # "Never imply a change is permanent" is a property of the returned payload, not just the prompt.
     result = await write_tools.prioritise_traffic_class(
         _client(_ok_handler),
         traffic_class=TrafficClass.LATENCY_SENSITIVE,
@@ -204,62 +211,3 @@ async def test_prioritising_a_class_creates_an_expiring_constraint() -> None:
 
     assert result["ttl_timesteps"] == 300
     assert result["expires_at_timestep"] == 42 + 300
-
-
-@pytest.mark.anyio
-async def test_the_constraint_is_stamped_with_the_simulator_timestep_not_a_guess() -> None:
-    captured: dict[str, object] = {}
-
-    def capture(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/constraints" and request.method == "POST":
-            import json
-
-            captured.update(json.loads(request.content))
-            return httpx.Response(200, json={"constraint_id": "c-1"})
-        return _ok_handler(request)
-
-    await write_tools.avoid_links(_client(capture), link_ids=["n0->n1"], ttl_timesteps=50)
-
-    assert captured["issued_at_timestep"] == 42
-    assert captured["issued_by"] == "agent-layer"
-
-
-@pytest.mark.anyio
-async def test_the_operator_utterance_is_recorded_for_attribution() -> None:
-    captured: dict[str, object] = {}
-
-    def capture(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/constraints" and request.method == "POST":
-            import json
-
-            captured.update(json.loads(request.content))
-            return httpx.Response(200, json={"constraint_id": "c-1"})
-        return _ok_handler(request)
-
-    await write_tools.set_objective_weights(
-        _client(capture), latency=4.0, operator_utterance="keep video smooth"
-    )
-
-    assert captured["operator_utterance"] == "keep video smooth"
-
-
-@pytest.mark.anyio
-async def test_revoking_a_constraint_that_is_not_there_raises() -> None:
-    def gone(request: httpx.Request) -> httpx.Response:
-        if request.url.path.startswith("/constraints/"):
-            return httpx.Response(200, json={"removed": False})
-        return _ok_handler(request)
-
-    with pytest.raises(ToolExecutionError, match="already expired"):
-        await write_tools.revoke_constraint(_client(gone), constraint_id="c-nope")
-
-
-@pytest.mark.anyio
-async def test_a_constraint_cannot_be_stamped_when_the_timestep_is_unreadable() -> None:
-    def bad_state(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/state":
-            return httpx.Response(200, json={"links": [], "flows": []})
-        return _ok_handler(request)
-
-    with pytest.raises(ToolExecutionError, match="timestep"):
-        await write_tools.avoid_links(_client(bad_state), link_ids=["n0->n1"])

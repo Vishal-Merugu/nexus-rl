@@ -13,6 +13,7 @@ dependencies = [
     "mcp>=1.2,<2",
     "httpx>=0.28",
     "pydantic>=2.10",
+    "nexus-a1",
     "nexus-config",
     "nexus-errors",
     "nexus-telemetry",

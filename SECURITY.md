@@ -28,23 +28,31 @@ Out of scope:
 
 ### Agent authority is structurally constrained
 
-The agent layer has no code path that produces an allocation. Its write tools accept only `Constraint`
-objects — objective reweightings, action masks, per-class floors. This is enforced at the type level
-(`nexus_types.Constraint`) and at the controller's ingress, which rejects anything else.
+The agent layer has no code path that produces an allocation. Its write tools emit only `A1Policy`
+documents — objective reweightings, routing restrictions, per-class floors — over the A1 interface. This is
+enforced at the type level (`nexus_a1.policy.A1Policy`) and at the xApp's ingress, which validates every
+policy against the live network before deciding what, if anything, it will enforce.
 
-A prompt injection that convinces the model to "set node 3 to 100% bandwidth" produces, at worst, a constraint
-the controller optimises within — never a direct allocation. See
-[ADR-0002](docs/adr/0002-constrained-agent-authority.md).
+A prompt injection that convinces the model to "set node 3 to 100% bandwidth" produces, at worst, a policy
+the xApp is free to refuse — never a direct allocation. See
+[ADR-0002](docs/adr/0002-constrained-agent-authority.md) and
+[ADR-0008](docs/adr/0008-oran-aligned-a1-interface.md).
 
-### Every constraint expires
+There is a second, narrower rule with its own test: no write tool may call `POST /constraints` directly.
+That endpoint bypasses A1 validation and returns no decision, so reaching it from the agent layer would
+restore exactly the unchecked write A1 replaced.
 
-`ttl_timesteps` is mandatory and bounded (`MAX_CONSTRAINT_TTL`). The controller expires constraints itself
-rather than waiting to be told to. An agent that goes silent leaves no residue.
+### Every policy expires
+
+`ttl_timesteps` is mandatory and bounded (`MAX_CONSTRAINT_TTL`) on every A1 policy — a deliberate deviation
+from the standard, which requires no policy lifetime. The xApp expires policies itself rather than waiting
+to be told to. An agent that goes silent leaves no residue.
 
 ### Provenance is recorded
 
-Every constraint carries `issued_by` and the operator utterance that produced it. Anything the agent layer
-changed is attributable after the fact — which is also what makes Use Case 2 (explanation) honest.
+Every policy carries `issued_by` (`rapp:agent-layer`) and the operator utterance that produced it, and the
+xApp records the decision that admitted or refused it. Anything the agent layer changed is attributable
+after the fact — which is also what makes Use Case 2 (explanation) honest.
 
 ### Secrets
 

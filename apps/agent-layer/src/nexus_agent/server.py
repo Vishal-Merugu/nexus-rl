@@ -1,6 +1,6 @@
 """MCP server exposing the orchestrator to an LLM.
 
-Read tools are unrestricted. Write tools produce constraints and nothing else. The registry below is the
+Read tools are unrestricted. Write tools issue A1 policies and nothing else. The registry below is the
 complete surface the model can reach — if a capability is not here, the model cannot do it, which is a
 stronger guarantee than any instruction in the prompt.
 """
@@ -73,7 +73,9 @@ class ToolSpec[TInput: BaseModel]:
     """The schema is **enforced**, not just advertised. See ``validate_arguments``."""
     handler: Callable[[OrchestratorClient, TInput], Awaitable[dict[str, object]]]
     writes: bool
-    """True only for constraint-writing tools. Used for the authority audit test and for logging."""
+    """True only for tools that reach the A1 interface. Used for the authority audit test and for
+    logging. Note what it does *not* mean: an A1 policy is an offer, and the xApp may refuse it — a write
+    tool changes what the operator has asked for, not necessarily what the network does."""
 
     @property
     def input_schema(self) -> dict[str, object]:
@@ -106,8 +108,10 @@ class ToolSpec[TInput: BaseModel]:
 def build_tool_specs() -> tuple[ToolInvoker, ...]:
     """The complete tool surface.
 
-    Every write tool here produces a ``Constraint``. Adding one that does anything else is an ADR, not a
-    code change — see ADR-0002 and `/add-mcp-tool`.
+    Every write tool here issues an ``A1Policy`` to the xApp, which validates it and answers with a
+    decision. Adding one that does anything else — above all one that writes a ``Constraint`` directly,
+    bypassing validation and the decision — is an ADR, not a code change. See ADR-0002, ADR-0008 and
+    `/add-mcp-tool`.
     """
     return (
         ToolSpec(
@@ -136,6 +140,13 @@ def build_tool_specs() -> tuple[ToolInvoker, ...]:
             description=read_tools.get_active_constraints.__doc__ or "",
             input_model=read_tools.GetNetworkStateInput,
             handler=lambda client, _: read_tools.get_active_constraints(client),
+            writes=False,
+        ),
+        ToolSpec(
+            name="get_active_policies",
+            description=read_tools.get_active_policies.__doc__ or "",
+            input_model=read_tools.GetNetworkStateInput,
+            handler=lambda client, _: read_tools.get_active_policies(client),
             writes=False,
         ),
         ToolSpec(
@@ -199,12 +210,23 @@ def build_tool_specs() -> tuple[ToolInvoker, ...]:
             writes=True,
         ),
         ToolSpec(
-            name="revoke_constraint",
-            description=write_tools.revoke_constraint.__doc__ or "",
-            input_model=write_tools.RevokeConstraintInput,
-            handler=lambda client, args: write_tools.revoke_constraint(
-                client, constraint_id=args.constraint_id
+            name="set_class_floor",
+            description=write_tools.set_class_floor.__doc__ or "",
+            input_model=write_tools.SetClassFloorInput,
+            handler=lambda client, args: write_tools.set_class_floor(
+                client,
+                traffic_class=args.traffic_class,
+                floor_mbps=args.floor_mbps,
+                ttl_timesteps=args.ttl_timesteps,
+                operator_utterance=args.operator_utterance,
             ),
+            writes=True,
+        ),
+        ToolSpec(
+            name="withdraw_policy",
+            description=write_tools.withdraw_policy.__doc__ or "",
+            input_model=write_tools.WithdrawPolicyInput,
+            handler=lambda client, args: write_tools.withdraw_policy(client, policy_id=args.policy_id),
             writes=True,
         ),
     )
@@ -240,7 +262,7 @@ def build_server(client: OrchestratorClient) -> Server:
 
         if spec.writes:
             _telemetry.info(
-                "Constraint applied via agent layer",
+                "A1 policy issued via agent layer",
                 {"tool": name, "arguments": arguments, "result": result},
             )
         return [TextContent(type="text", text=json.dumps(result, default=str))]
@@ -282,7 +304,7 @@ def main() -> None:
 
     if args.list_tools:
         for spec in build_tool_specs():
-            kind = "WRITE (constraints only)" if spec.writes else "read"
+            kind = "WRITE (A1 policies only)" if spec.writes else "read"
             _telemetry.info("tool", {"name": spec.name, "kind": kind})
         return
 

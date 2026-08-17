@@ -47,6 +47,7 @@ def test_every_named_reward_component_is_averaged() -> None:
 
     assert set(summary.mean_reward_components) == {
         "throughput_reward",
+        "sla_attainment_reward",
         "latency_penalty",
         "drop_penalty",
         "fairness_bonus",

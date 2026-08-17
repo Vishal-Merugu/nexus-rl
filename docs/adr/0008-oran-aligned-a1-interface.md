@@ -83,9 +83,16 @@ Three deliberate deviations from the standard, all in the direction of being str
   according to O-RAN's architecture", never "O-RAN compliant" — and the README says so.
 - **One more package.** `nexus-a1` depends only on `nexus-types` and `nexus-errors`, so it stays a wire
   contract and does not drag the simulator into the agent layer.
-- **The v1 constraint path is now internal.** `POST /constraints` still exists and still works; A1 is the
-  interface the agent layer should move to. Retiring the direct constraint write is a follow-up, not part
-  of this ADR.
+- **The v1 constraint path is now internal.** The agent layer issues A1 policies exclusively; nothing in
+  `write_tools.py` writes a `Constraint`, and a test asserts no write tool touches `/constraints`.
+  `POST /constraints` still exists on the controller for direct operator use, but it is no longer on any
+  path the LLM can reach. Retiring that endpoint entirely is a follow-up, not part of this ADR.
+- **The rApp's write surface grew by one tool.** The xApp advertises three policy types, and until the rApp
+  could issue a `CLASS_FLOOR` it advertised a capability no client could use — the interface-level form of
+  the "contract field nobody reads" failure. `set_class_floor` closes that, and it is also the only policy
+  type the network can make *impossible*, which is what makes Use Case 8 demonstrable rather than
+  theoretical. `revoke_constraint` became `withdraw_policy` for the same reason: withdrawal has to key on
+  the policy id the operator was given, or the xApp's policy store and its constraint store drift apart.
 
 ## Alternatives considered
 

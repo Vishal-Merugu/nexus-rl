@@ -20,13 +20,46 @@ services:
       NEXUS_ENV: development
       NEXUS_SEED: ${NEXUS_SEED:-1337}
       NEXUS_TOPOLOGY: ${NEXUS_TOPOLOGY:-mesh-6}
-      NEXUS_CONTROLLER_URL: http://controller:8001
+      # The safety supervisor sits in the fast path and speaks the controller's own /act contract, so
+      # putting it here is the entire deployment change (ADR-0010). Set to http://controller:8001 to run
+      # without the guardrail.
+      NEXUS_CONTROLLER_URL: ${NEXUS_SIMULATOR_ACT_URL:-http://safety-supervisor:8003}
       NEXUS_LOG_LEVEL: ${NEXUS_LOG_LEVEL:-INFO}
     ports:
       - "${SIMULATOR_HOST_PORT:-8000}:8000"
     healthcheck:
       # Reports the actual timestep and whether the controller is reachable — not an unconditional 200.
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    depends_on:
+      safety-supervisor:
+        condition: service_healthy
+
+  safety-supervisor:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.python
+      args:
+        SERVICE_PATH: apps/safety-supervisor
+    command: uvicorn nexus_supervisor.main:app --host 0.0.0.0 --port 8003
+    environment:
+      NEXUS_ENV: development
+      NEXUS_CONTROLLER_URL: http://controller:8001
+      # A second controller serving the shadow-staged policy version. Empty disables shadow mode, which
+      # is the normal state — it doubles the calls in the fast loop.
+      NEXUS_SHADOW_CONTROLLER_URL: ${NEXUS_SHADOW_CONTROLLER_URL:-}
+      NEXUS_SAFETY_MAX_P95_LATENCY_MS: ${NEXUS_SAFETY_MAX_P95_LATENCY_MS:-250}
+      NEXUS_SAFETY_MAX_DROP_RATE: ${NEXUS_SAFETY_MAX_DROP_RATE:-0.35}
+      NEXUS_SAFETY_MIN_FAIRNESS: ${NEXUS_SAFETY_MIN_FAIRNESS:-0.25}
+      NEXUS_LOG_LEVEL: ${NEXUS_LOG_LEVEL:-INFO}
+    ports:
+      - "${SUPERVISOR_HOST_PORT:-8003}:8003"
+    healthcheck:
+      # Reports whether the *policy* or the fallback is driving, not just liveness.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -48,12 +81,17 @@ services:
       NEXUS_ENV: development
       NEXUS_SEED: ${NEXUS_SEED:-1337}
       NEXUS_TOPOLOGY: ${NEXUS_TOPOLOGY:-mesh-6}
-      # Empty: falls back to the static baseline and says so on /health. Set to a checkpoint path
-      # (mounted below) to serve a trained policy.
+      # Empty: falls back to the static baseline and says so on /health. Set to a registry identifier
+      # — a stage ('production') or a pin ('v7') — to serve a trained policy. The ledger and the run
+      # artifacts are both mounted below.
+      NEXUS_POLICY_VERSION: ${NEXUS_POLICY_VERSION:-}
+      # Escape hatch for an unregistered checkpoint. Ignored when NEXUS_POLICY_VERSION is set, and it
+      # carries no provenance — /health reports policy_provenance: null.
       NEXUS_POLICY_PATH: ${NEXUS_POLICY_PATH:-}
       NEXUS_LOG_LEVEL: ${NEXUS_LOG_LEVEL:-INFO}
     volumes:
       - ../experiments/runs:/app/experiments/runs:ro
+      - ../experiments/registry:/app/experiments/registry:ro
     ports:
       - "${CONTROLLER_HOST_PORT:-8001}:8001"
     healthcheck:

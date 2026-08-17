@@ -38,11 +38,53 @@ class Settings(BaseSettings):
 
     simulator_url: str = Field(default="http://localhost:8000")
     controller_url: str = Field(default="http://localhost:8001")
+    shadow_controller_url: str = Field(
+        default="",
+        description="A second controller serving the shadow-staged policy version. Empty disables shadow "
+        "mode, which is the normal state — it doubles the calls in the fast loop, so it is opt-in.",
+    )
+    supervisor_url: str = Field(
+        default="http://localhost:8003",
+        description="Safety supervisor. Point the simulator here instead of at the controller to put the "
+        "guardrail in the fast path — it speaks the same /act contract.",
+    )
+
+    # --- Safety supervisor ---
+    # Guardrail limits, read only by the supervisor. Deliberately not shared with the controller: a
+    # guardrail configured by the thing it guards is not a guardrail (v2 spec, Decision 9).
+    safety_max_p95_latency_ms: float = Field(default=250.0, gt=0.0)
+    safety_max_drop_rate: float = Field(default=0.35, ge=0.0, le=1.0)
+    safety_min_fairness: float = Field(default=0.25, ge=0.0, le=1.0)
+    safety_breaches_to_engage: int = Field(
+        default=10, gt=0, description="Consecutive QoS breaches before the fallback takes over."
+    )
+    safety_healthy_to_release: int = Field(
+        default=60,
+        gt=0,
+        description="Consecutive healthy timesteps before the policy is trusted again. Longer than the "
+        "engage window on purpose — otherwise the fallback fixes the metric, hands straight back, and "
+        "the system oscillates.",
+    )
+    safety_starvation_share: float = Field(default=0.01, ge=0.0, le=1.0)
+    safety_starvation_window: int = Field(default=50, gt=0)
+
+    policy_version: str | None = Field(
+        default=None,
+        description="Which policy the controller serves, as a registry identifier: a stage ('production', "
+        "'shadow') or an exact pin ('v7'). The stage form makes promotion and rollback a registry "
+        "operation rather than a redeploy. None falls back to the `static` baseline, which /health "
+        "reports.",
+    )
+    registry_root: Path | None = Field(
+        default=None,
+        description="Policy registry location. None resolves to <project>/experiments/registry.",
+    )
 
     policy_path: Path | None = Field(
         default=None,
-        description="Checkpoint for the controller. None falls back to the `static` baseline allocator, "
-        "which the controller reports on /health.",
+        description="Escape hatch: load a checkpoint directly, bypassing the registry. Carries no "
+        "provenance — /health can report what file is loaded but not which run, commit or score it came "
+        "from. Ignored when policy_version is set. Prefer registering the run.",
     )
 
     # --- Agent-layer LLM ---

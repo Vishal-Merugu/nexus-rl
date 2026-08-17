@@ -17,10 +17,13 @@ members = [
     "nexus-env",
     "nexus-errors",
     "nexus-mdp",
+    "nexus-registry",
     "nexus-rl",
     "nexus-rl-workspace",
+    "nexus-safety",
     "nexus-sim",
     "nexus-simulator",
+    "nexus-supervisor",
     "nexus-telemetry",
     "nexus-types",
 ]
@@ -959,6 +962,7 @@ source = { editable = "apps/agent-layer" }
 dependencies = [
     { name = "httpx" },
     { name = "mcp" },
+    { name = "nexus-a1" },
     { name = "nexus-config" },
     { name = "nexus-errors" },
     { name = "nexus-telemetry" },
@@ -970,6 +974,7 @@ dependencies = [
 requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "mcp", specifier = ">=1.2,<2" },
+    { name = "nexus-a1", editable = "packages/nexus-a1" },
     { name = "nexus-config", editable = "packages/nexus-config" },
     { name = "nexus-errors", editable = "packages/nexus-errors" },
     { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
@@ -1024,6 +1029,7 @@ dependencies = [
     { name = "nexus-config" },
     { name = "nexus-errors" },
     { name = "nexus-mdp" },
+    { name = "nexus-registry" },
     { name = "nexus-telemetry" },
     { name = "nexus-types" },
     { name = "numpy" },
@@ -1044,6 +1050,7 @@ requires-dist = [
     { name = "nexus-config", editable = "packages/nexus-config" },
     { name = "nexus-errors", editable = "packages/nexus-errors" },
     { name = "nexus-mdp", editable = "packages/nexus-mdp" },
+    { name = "nexus-registry", editable = "packages/nexus-registry" },
     { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
     { name = "nexus-types", editable = "packages/nexus-types" },
     { name = "numpy", specifier = ">=2.0" },
@@ -1101,6 +1108,21 @@ requires-dist = [
 ]
 
 [[package]]
+name = "nexus-registry"
+version = "0.1.0"
+source = { editable = "packages/nexus-registry" }
+dependencies = [
+    { name = "nexus-errors" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "nexus-errors", editable = "packages/nexus-errors" },
+    { name = "pydantic", specifier = ">=2.10" },
+]
+
+[[package]]
 name = "nexus-rl"
 version = "0.1.0"
 source = { editable = "packages/nexus-rl" }
@@ -1109,6 +1131,7 @@ dependencies = [
     { name = "nexus-env" },
     { name = "nexus-errors" },
     { name = "nexus-mdp" },
+    { name = "nexus-registry" },
     { name = "nexus-sim" },
     { name = "nexus-telemetry" },
     { name = "nexus-types" },
@@ -1128,6 +1151,7 @@ requires-dist = [
     { name = "nexus-env", editable = "packages/nexus-env" },
     { name = "nexus-errors", editable = "packages/nexus-errors" },
     { name = "nexus-mdp", editable = "packages/nexus-mdp" },
+    { name = "nexus-registry", editable = "packages/nexus-registry" },
     { name = "nexus-sim", editable = "packages/nexus-sim" },
     { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
     { name = "nexus-types", editable = "packages/nexus-types" },
@@ -1151,9 +1175,12 @@ dependencies = [
     { name = "nexus-env" },
     { name = "nexus-errors" },
     { name = "nexus-mdp" },
+    { name = "nexus-registry" },
     { name = "nexus-rl" },
+    { name = "nexus-safety" },
     { name = "nexus-sim" },
     { name = "nexus-simulator" },
+    { name = "nexus-supervisor" },
     { name = "nexus-telemetry" },
     { name = "nexus-types" },
 ]
@@ -1178,9 +1205,12 @@ requires-dist = [
     { name = "nexus-env", editable = "packages/nexus-env" },
     { name = "nexus-errors", editable = "packages/nexus-errors" },
     { name = "nexus-mdp", editable = "packages/nexus-mdp" },
+    { name = "nexus-registry", editable = "packages/nexus-registry" },
     { name = "nexus-rl", editable = "packages/nexus-rl" },
+    { name = "nexus-safety", editable = "packages/nexus-safety" },
     { name = "nexus-sim", editable = "packages/nexus-sim" },
     { name = "nexus-simulator", editable = "apps/simulator" },
+    { name = "nexus-supervisor", editable = "apps/safety-supervisor" },
     { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
     { name = "nexus-types", editable = "packages/nexus-types" },
 ]
@@ -1193,6 +1223,23 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.9" },
     { name = "types-pyyaml", specifier = ">=6.0" },
+]
+
+[[package]]
+name = "nexus-safety"
+version = "0.1.0"
+source = { editable = "packages/nexus-safety" }
+dependencies = [
+    { name = "nexus-errors" },
+    { name = "nexus-types" },
+    { name = "pydantic" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "nexus-errors", editable = "packages/nexus-errors" },
+    { name = "nexus-types", editable = "packages/nexus-types" },
+    { name = "pydantic", specifier = ">=2.10" },
 ]
 
 [[package]]
@@ -1234,6 +1281,35 @@ requires-dist = [
     { name = "nexus-config", editable = "packages/nexus-config" },
     { name = "nexus-errors", editable = "packages/nexus-errors" },
     { name = "nexus-sim", editable = "packages/nexus-sim" },
+    { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
+    { name = "nexus-types", editable = "packages/nexus-types" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
+]
+
+[[package]]
+name = "nexus-supervisor"
+version = "0.1.0"
+source = { editable = "apps/safety-supervisor" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "nexus-baselines" },
+    { name = "nexus-config" },
+    { name = "nexus-errors" },
+    { name = "nexus-safety" },
+    { name = "nexus-telemetry" },
+    { name = "nexus-types" },
+    { name = "uvicorn", extra = ["standard"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "nexus-baselines", editable = "packages/nexus-baselines" },
+    { name = "nexus-config", editable = "packages/nexus-config" },
+    { name = "nexus-errors", editable = "packages/nexus-errors" },
+    { name = "nexus-safety", editable = "packages/nexus-safety" },
     { name = "nexus-telemetry", editable = "packages/nexus-telemetry" },
     { name = "nexus-types", editable = "packages/nexus-types" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },

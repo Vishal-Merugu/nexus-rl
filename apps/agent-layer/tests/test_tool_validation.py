@@ -45,7 +45,18 @@ def _client() -> OrchestratorClient:
         ("prioritise_traffic_class", {"traffic_class": "BULK", "ttl_timesteps": 0}, "ttl must be > 0"),
         ("set_objective_weights", {"latency": -1.0}, "weights are non-negative"),
         ("set_objective_weights", {"latency": 10_000.0}, "exceeds MAX_OBJECTIVE_WEIGHT"),
-        ("revoke_constraint", {"constraint_id": ""}, "declared min_length is 1"),
+        ("withdraw_policy", {"policy_id": ""}, "declared min_length is 1"),
+        (
+            "set_class_floor",
+            {"traffic_class": "BULK", "floor_mbps": -1.0},
+            "a floor cannot be negative",
+        ),
+        (
+            "set_class_floor",
+            {"traffic_class": "BULK", "floor_mbps": 1e9},
+            "exceeds MAX_CLASS_FLOOR_MBPS",
+        ),
+        ("set_class_floor", {"floor_mbps": 10.0}, "traffic_class is required"),
     ],
 )
 def test_declared_bounds_are_enforced(tool: str, arguments: dict[str, object], why: str) -> None:
@@ -58,8 +69,9 @@ def test_declared_bounds_are_enforced(tool: str, arguments: dict[str, object], w
     [
         ("get_flow_detail", {}),
         ("avoid_links", {}),
-        ("revoke_constraint", {}),
+        ("withdraw_policy", {}),
         ("prioritise_traffic_class", {}),
+        ("set_class_floor", {}),
     ],
 )
 def test_a_missing_required_argument_is_a_tool_error(tool: str, arguments: dict[str, object]) -> None:

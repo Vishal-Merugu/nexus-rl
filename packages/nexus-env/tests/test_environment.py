@@ -123,6 +123,7 @@ def test_info_carries_every_named_reward_component() -> None:
     assert isinstance(components, dict)
     assert set(components) == {
         "throughput_reward",
+        "sla_attainment_reward",
         "latency_penalty",
         "drop_penalty",
         "fairness_bonus",

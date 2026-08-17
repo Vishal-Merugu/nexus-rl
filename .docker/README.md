@@ -53,16 +53,25 @@ checkpoint:
 
 1. Uncomment `EXTRAS: policy` under the controller build args (this adds torch — the image gets much
    larger).
-2. Set `NEXUS_POLICY_PATH` to a path under `experiments/runs/`, which is mounted read-only at
-   `/app/experiments/runs`.
+2. Register and promote the run, then point the controller at the *version*, not a file:
 
 ```bash
-NEXUS_POLICY_PATH=/app/experiments/runs/<run-id>/policy.zip \
+uv run nexus-registry register <run-id>
+uv run nexus-registry score v1
+uv run nexus-registry promote v1 --stage production
+
+NEXUS_POLICY_VERSION=production \
   docker compose -f .docker/docker-compose.yml up -d --build controller
 ```
 
-Confirm with `curl localhost:8001/health` — `trained_policy_loaded` should be `true`. If it is `false`,
-`fallback_reason` says why; the usual cause is an `MDP_VERSION` mismatch.
+Both `experiments/runs` (weights) and `experiments/registry` (the provenance ledger) are mounted read-only.
+
+Confirm with `curl localhost:8001/health` — `trained_policy_loaded` should be `true`, and
+`policy_provenance` names the run, commit and suite score behind it. If it is `false`, `fallback_reason`
+says why; the usual causes are an `MDP_VERSION` mismatch or nothing promoted to that stage.
+
+`NEXUS_POLICY_PATH=/app/experiments/runs/<run-id>/policy.zip` still works for an unregistered checkpoint,
+but reports no provenance. See `docs/operations/model-registry.md`.
 
 ## Images
 

@@ -22,6 +22,7 @@ from nexus_sim.flow import FlowSpec, base_demands_mbps, build_flows, path_incide
 from nexus_sim.incident import effective_capacities_mbps
 from nexus_sim.latency import flow_latency_ms, link_latency_ms
 from nexus_sim.metrics import StepMetrics, compute_metrics
+from nexus_sim.randomization import IDENTITY_DOMAIN, SampledDomain, apply_domain
 from nexus_sim.topology import Topology, build_topology
 from nexus_sim.traffic import TrafficPattern, get_traffic_pattern
 from nexus_types.action import AllocationAction
@@ -47,6 +48,7 @@ class NetworkSimulator:
         rng: Injected generator. Every stochastic draw goes through it — there is no global RNG anywhere in
             this package, which is what makes runs reproducible.
         incidents: Scheduled degradations. Part of the environment, not the action space.
+        domain: Randomized environment parameters for this episode. Defaults to the nominal network.
     """
 
     def __init__(
@@ -56,15 +58,17 @@ class NetworkSimulator:
         traffic_pattern: TrafficPattern,
         rng: np.random.Generator,
         incidents: tuple[Incident, ...] = (),
+        domain: SampledDomain = IDENTITY_DOMAIN,
     ) -> None:
         self._topology = topology
         self._flows = flows
         self._pattern = traffic_pattern
         self._rng = rng
         self._incidents = incidents
+        self._domain = domain
 
         self._nominal_capacity = topology.capacities_mbps()
-        self._base_demand = base_demands_mbps(flows)
+        self._base_demand = base_demands_mbps(flows) * domain.demand_scale
         self._traffic_classes = tuple(flow.traffic_class for flow in flows)
         self._link_index = topology.link_index()
 
@@ -80,21 +84,32 @@ class NetworkSimulator:
         seed: int,
         flow_count: int = DEFAULT_FLOW_COUNT,
         incidents: tuple[Incident, ...] = (),
+        domain: SampledDomain = IDENTITY_DOMAIN,
     ) -> NetworkSimulator:
         """Build a simulator from named components and a seed.
 
-        The flow set is derived from the same seed, so a run config of (topology, pattern, seed, flow_count)
-        fully determines the simulation.
+        The flow set is derived from the same seed, so a run config of (topology, pattern, seed,
+        flow_count, domain) fully determines the simulation.
+
+        ``domain`` scales capacity, demand and latency for this episode — see
+        :mod:`nexus_sim.randomization`. It defaults to the nominal network, so every existing caller and
+        every recorded result is unaffected. Randomization is opt-in by construction rather than a mode
+        that could silently be on.
         """
-        topology = build_topology(topology_name)
+        nominal = build_topology(topology_name)
+        topology = apply_domain(nominal, domain) if domain != IDENTITY_DOMAIN else nominal
         rng = np.random.default_rng(seed)
-        flows = build_flows(topology, rng, flow_count=flow_count)
+        # Flows are built from the *nominal* topology so the flow set and its candidate paths do not shift
+        # with the capacity draw. Randomizing the network the policy runs on is the point; randomizing
+        # which flows exist would change the problem, not the conditions.
+        flows = build_flows(nominal, rng, flow_count=flow_count)
         return cls(
             topology=topology,
             flows=flows,
             traffic_pattern=get_traffic_pattern(traffic_pattern_name),
             rng=rng,
             incidents=incidents,
+            domain=domain,
         )
 
     @property
@@ -177,7 +192,10 @@ class NetworkSimulator:
         )
         self._queue_mb = result.queue_mb
 
-        per_link_latency = link_latency_ms(result.utilization, result.queue_mb, effective_capacity)
+        per_link_latency = (
+            link_latency_ms(result.utilization, result.queue_mb, effective_capacity)
+            * self._domain.latency_scale
+        )
         per_flow_latency = flow_latency_ms(incidence, per_link_latency)
         paths = selected_paths(self._flows, path_choice)
 

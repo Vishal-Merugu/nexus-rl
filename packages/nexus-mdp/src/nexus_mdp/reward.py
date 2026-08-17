@@ -25,7 +25,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from nexus_sim.constants import EPSILON, MAX_LINK_LATENCY_MS
+from nexus_sim.slicing import all_attainments
 from nexus_types.network_state import NetworkState
+from nexus_types.slice import DEFAULT_SLICES, SliceSet
 from nexus_types.traffic_class import TrafficClass
 
 _LATENCY_CLASS_WEIGHT: dict[TrafficClass, float] = {
@@ -60,10 +62,18 @@ class RewardWeights:
     never be profitable."""
     fairness: float = 0.5
 
+    sla_attainment: float = 1.5
+    """Per-slice SLA attainment (MDP_VERSION 2).
+
+    Weighted above throughput on purpose. Slicing exists so the network can keep *differentiated*
+    promises, and a policy that maximises aggregate satisfaction while breaching the premium slice has
+    optimised the wrong thing — which is exactly what the v1 reward asked for."""
+
 
 def compute_reward(
     state: NetworkState,
     weights: RewardWeights = RewardWeights(),
+    slices: SliceSet = DEFAULT_SLICES,
 ) -> dict[str, float]:
     """Compute the named reward components for one timestep.
 
@@ -79,6 +89,7 @@ def compute_reward(
             "latency_penalty": 0.0,
             "drop_penalty": 0.0,
             "fairness_bonus": 0.0,
+            "sla_attainment_reward": 0.0,
         }
 
     satisfaction = state.total_allocated_mbps / demand
@@ -101,7 +112,36 @@ def compute_reward(
         # Scaled by satisfaction so that starving everyone equally — which scores a perfect 1.0 on Jain's
         # index — earns nothing.
         "fairness_bonus": weights.fairness * fairness * satisfaction,
+        "sla_attainment_reward": weights.sla_attainment * _sla_attainment(state, slices),
     }
+
+
+def _sla_attainment(state: NetworkState, slices: SliceSet) -> float:
+    """Priority-weighted mean SLA headroom across slices, in [0, 1].
+
+    Three deliberate choices, each closing a degenerate optimum:
+
+    - **Headroom, not a met/unmet boolean.** A step function gives the policy no gradient, so it learns
+      nothing about whether it is getting warmer and settles just past a limit it could cheaply clear.
+    - **Weighted by tier priority.** An unweighted mean lets the policy satisfy two cheap best-effort
+      slices and abandon premium — a strictly worse outcome that scores better.
+    - **The *minimum* term within each slice** (in ``SliceAttainment.headroom``). Excellent latency does
+      not compensate for a breached satisfaction floor; an SLA is a conjunction, not an average.
+    """
+    attainments = all_attainments(state, slices)
+    if not attainments:
+        return 0.0
+
+    weighted = 0.0
+    total_weight = 0.0
+    for attainment in attainments:
+        network_slice = slices.by_id(attainment.slice_id)
+        # +1 so best-effort (priority 0) still carries weight. A zero-weighted slice is one the policy is
+        # free to abandon entirely, which is starvation with extra steps.
+        weight = float(network_slice.priority + 1) if network_slice is not None else 1.0
+        weighted += weight * attainment.headroom
+        total_weight += weight
+    return weighted / total_weight if total_weight > 0.0 else 0.0
 
 
 def total_reward(components: dict[str, float]) -> float:

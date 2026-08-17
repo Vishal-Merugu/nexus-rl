@@ -149,3 +149,96 @@ implementation — the shape, not the protocol.
 
 Service Management and Orchestration — the framework hosting the Non-RT RIC. Here: nothing distinct yet;
 the dashboard stands in for the SMO-side operator console.
+
+## Model lifecycle (Stage I)
+
+### Policy version
+
+A registered, addressable policy: an id (`v7`), the provenance of the run that produced it, every
+evaluation score it has earned, and a deployment stage. The unit the controller is configured with —
+`NEXUS_POLICY_VERSION=v7`, never a path to a checkpoint file.
+
+_Avoid_: "the model", "the checkpoint" when you mean a version. A checkpoint is weights on disk; a version
+is weights plus the record of where they came from and what they scored.
+
+### Provenance
+
+The origin of a policy version: run id, git SHA, `MDP_VERSION`, algorithm, action mode, topology, flow
+count, training pattern, seed, timesteps. All required — a version missing any of them cannot be
+reproduced, and "mostly traceable" is what lets an untraceable artifact into production.
+
+### Stage
+
+Where a version sits: `none`, `shadow`, `production`, `archived`. A **deployment claim**, and at most one
+version holds `production` at a time. Demotion is to `archived` rather than `none` so a rollback target
+stays findable.
+
+### Evaluation suite
+
+The fixed, versioned scenario set every candidate is scored against
+(`experiments/configs/evaluation-suite.yaml`). Two policies are comparable only if they met the same
+scenarios, seeds and step count. Scores record `suite_version`; changing the suite makes earlier scores
+incomparable and requires a bump, exactly like `MDP_VERSION`.
+
+### Promotion
+
+Moving a version to a stage. Refuses a stale `MDP_VERSION` outright, and an unscored or fewer-than-three-
+seed version unless explicitly forced.
+
+_Avoid_: "deploying a model" for the act of copying a file. Promotion is a registry operation; the
+controller follows it.
+
+## Safety (Stages K–L)
+
+### Safety supervisor
+
+An independent service in the fast path that checks the controller's actions against hard bounds,
+substitutes a deterministic allocator when the policy cannot be trusted, and reports policy-level
+observability. Separate from the controller on purpose: a guardrail inside the thing it guards shares its
+failure modes (ADR-0010).
+
+### Action bounds
+
+Limits enforced **outside the model**, on the action the policy produced. Share range, known flows, valid
+routes, and starvation over a window. Distinct from QoS thresholds.
+
+_Avoid_: calling `AllocationAction`'s own validator a guardrail. It is a type boundary — it rejects bad
+values by refusing to exist, which destroys the diagnosis rather than producing one.
+
+### QoS thresholds
+
+Limits on what the network actually **did**, as opposed to what the policy asked for. A policy can emit
+perfectly in-range shares and still drive the network into the ground.
+
+### Fallback activation
+
+The deterministic allocator taking over. Engages on an unrepairable action immediately, or on sustained
+QoS breaches; releases only after a *longer* run of healthy timesteps, because the fallback fixes the
+metric it engaged on and instant release oscillates. Its **rate is the clearest failure signal the system
+has**.
+
+### Drift
+
+Standardised deviation of live state from the training-time reference. A **leading indicator**, reported
+and never acted on — by the time QoS is breaching, the warning came too late to be useful.
+
+### Domain randomization
+
+Randomizing simulator parameters (capacity, demand, latency) per episode so the policy learns a
+distribution rather than one network. Improves robustness; **provides no explicit safety guarantee**, and
+over-wide ranges destabilise training.
+
+_Avoid_: "the policy is safe because it was domain-randomized". Say "more robust across the range it saw".
+
+### Held-out configuration
+
+A simulator configuration deliberately **outside** the training randomization ranges. Evaluating there is
+what makes a robustness claim evidence rather than a restatement of the training score.
+
+### Shadow mode
+
+Running a candidate policy alongside the incumbent, its decisions recorded and never applied. Answers
+*readiness* — safe, responsive, meaningfully different — never *superiority*, because the candidate's
+actions were never applied and no outcome is attributable to it.
+
+_Avoid_: "the shadow policy performed better". It did not perform at all.

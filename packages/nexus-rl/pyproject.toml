@@ -10,6 +10,7 @@ dependencies = [
     "nexus-env",
     "nexus-mdp",
     "nexus-errors",
+    "nexus-registry",
     "nexus-sim",
     "nexus-telemetry",
     "nexus-types",
@@ -23,6 +24,8 @@ train = ["stable-baselines3>=2.4", "torch>=2.5"]
 [project.scripts]
 nexus-train = "nexus_rl.train:main"
 nexus-eval = "nexus_rl.evaluate:main"
+nexus-registry = "nexus_rl.registry_cli:main"
+nexus-train-marl = "nexus_rl.train_marl:main"
 
 [build-system]
 requires = ["hatchling"]

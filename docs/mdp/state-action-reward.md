@@ -191,3 +191,37 @@ that quietly mean nothing.
 | Version | Change | Invalidated |
 | ------- | ------ | ----------- |
 | 1 | Initial formulation | — |
+
+
+## MDP_VERSION 2 — network slicing (Stage J)
+
+A fifth reward component, `sla_attainment_reward`: priority-weighted per-slice SLA headroom against
+`DEFAULT_SLICES`. **The observation encoding and the action space are unchanged.**
+
+It is still a version bump. A version-1 policy optimised aggregate satisfaction with no notion of a
+differentiated promise — it is not merely scored differently here, the objective it learned is a different
+objective, and comparing the two would be comparing answers to two different questions.
+
+Three choices inside the component, each closing a degenerate optimum:
+
+- **Headroom, not a met/unmet boolean.** A step function gives no gradient, so the policy learns nothing
+  about whether it is getting warmer and settles just past a limit it could cheaply clear.
+- **Weighted by tier priority (+1 so best-effort still counts).** An unweighted mean lets the policy
+  satisfy two cheap best-effort slices and abandon premium — a strictly worse outcome scoring better. A
+  zero-weighted slice would be one it is free to starve.
+- **The minimum term within each slice.** An SLA is a conjunction; excellent latency does not compensate
+  for a breached satisfaction floor.
+
+**Invalidated by the bump:** every run recorded under version 1 (`smoke-001`, `smoke-002`). Neither is
+cited in `docs/evaluation/results.md`.
+
+### The multi-agent contract (CTDE)
+
+`nexus_mdp.multi_agent` owns *who observes what* — the part that has to be right before any algorithm is
+chosen. One agent per slice, scopes derived from state rather than configuration, and a local observation
+that contains only the agent's own flows plus aggregate pressure on shared links.
+
+`encode_joint_observation` is the centralized critic's, training only, and is a separate function
+precisely so handing it to an execution path is a visible act. The load-bearing test asserts an agent's
+local observation does not change when another slice's flows do — if that fails, "decentralized execution"
+is a claim the code does not support.

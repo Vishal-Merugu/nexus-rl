@@ -57,6 +57,7 @@ def test_every_component_is_present_and_named() -> None:
 
     assert set(components) == {
         "throughput_reward",
+        "sla_attainment_reward",
         "latency_penalty",
         "drop_penalty",
         "fairness_bonus",

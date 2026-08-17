@@ -21,6 +21,11 @@ from nexus_controller.a1_store import A1PolicyStore
 from nexus_controller.class_floors import apply_class_floors
 from nexus_controller.constraint_store import ConstraintStore
 from nexus_controller.policy_host import PolicyHost, build_default_host, describe_fallback_reason
+from nexus_controller.policy_resolution import (
+    ResolvedPolicy,
+    describe_resolution_failure,
+    try_resolve_policy,
+)
 from nexus_errors.control_error import ConstraintRejectedError
 from nexus_mdp.version import MDP_VERSION
 from nexus_telemetry.client import get_telemetry
@@ -32,6 +37,12 @@ from nexus_types.network_state import NetworkState
 _telemetry = get_telemetry("nexus.controller")
 
 _host: PolicyHost | None = None
+_resolved: ResolvedPolicy | None = None
+"""Which registry version is serving, if any.
+
+Kept alongside the host so /health can answer "where did this policy come from" — the question a filename
+cannot answer, and the reason Stage I exists.
+"""
 _constraints = ConstraintStore()
 _a1 = A1PolicyStore(_constraints)
 _decisions: deque[dict[str, object]] = deque(maxlen=DEFAULT_HISTORY_SIZE)
@@ -78,10 +89,36 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # The controller holds no model of the network. Everything needed to decode an action — the flow set
     # and each flow's candidate paths — arrives in the state passed to /act, so the controller cannot
     # disagree with the simulator about what it is controlling.
+    global _resolved
     _host = build_default_host()
-    _host.try_load(settings.policy_path)
 
-    _telemetry.info("Controller ready", {"policy": _host.policy_label, "mdp_version": MDP_VERSION})
+    # Registry first: a version identifier carries provenance, a path does not. `policy_path` remains an
+    # escape hatch for a checkpoint that was never registered, and is ignored when both are set rather
+    # than silently racing it.
+    _resolved = try_resolve_policy(settings.policy_version, settings.registry_root)
+    if _resolved is not None:
+        if settings.policy_path is not None:
+            _telemetry.info(
+                "Both NEXUS_POLICY_VERSION and NEXUS_POLICY_PATH are set; serving the registry version "
+                "and ignoring the path.",
+                {"policy_version": settings.policy_version, "ignored_path": str(settings.policy_path)},
+            )
+        _host.try_load(
+            _resolved.checkpoint,
+            algorithm=_resolved.version.provenance.algorithm,
+            label=_resolved.label,
+        )
+    elif settings.policy_version is None:
+        _host.try_load(settings.policy_path)
+
+    _telemetry.info(
+        "Controller ready",
+        {
+            "policy": _host.policy_label,
+            "mdp_version": MDP_VERSION,
+            "provenance": _resolved.provenance_summary if _resolved else None,
+        },
+    )
     yield
     _telemetry.info("Controller stopped", {})
 
@@ -103,6 +140,11 @@ class HealthResponse(BaseModel):
     active_constraints: int
     stored_constraints: int
     """Includes any not yet expired-and-collected. Reported alongside `active` so a mismatch is visible."""
+    policy_provenance: dict[str, object] | None = None
+    """Which run, commit, MDP version and suite score the serving policy came from.
+
+    None when a baseline is serving, or when a checkpoint was loaded by path and therefore has no
+    provenance to report — the two are distinguished by `trained_policy_loaded`."""
 
 
 class ActRequest(BaseModel):
@@ -118,6 +160,17 @@ class DecisionRecord(BaseModel):
     active_constraint_ids: list[str] = Field(default_factory=list)
 
 
+def _fallback_reason(settings: Settings) -> str:
+    """Why a baseline is serving.
+
+    Two different situations that must not read the same: nothing was configured (supported), or what was
+    configured could not be served (an incident). Which one it is decides whether anybody needs to act.
+    """
+    if settings.policy_version is not None:
+        return describe_resolution_failure(settings.policy_version)
+    return describe_fallback_reason(settings.policy_path)
+
+
 @app.get("/health", response_model=HealthResponse)
 def health(
     host: PolicyHost = Depends(get_host), settings: Settings = Depends(get_settings)
@@ -128,7 +181,8 @@ def health(
         status="ok",
         policy=host.policy_label,
         trained_policy_loaded=host.has_trained_policy,
-        fallback_reason=(None if host.has_trained_policy else describe_fallback_reason(settings.policy_path)),
+        fallback_reason=(None if host.has_trained_policy else _fallback_reason(settings)),
+        policy_provenance=_resolved.provenance_summary if _resolved else None,
         mdp_version=MDP_VERSION,
         last_timestep=_last_timestep,
         active_constraints=len(_constraints.snapshot(_last_timestep).active()),

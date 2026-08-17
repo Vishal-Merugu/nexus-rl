@@ -1,0 +1,33 @@
+# MAPPO over three network slices (Stage J, Track B).
+#
+# One agent per slice under CTDE: each policy sees only its own slice's flows plus aggregate pressure on
+# shared links; the critic sees global state during training and is discarded at deployment.
+#
+# Scale note: 60k timesteps is a *pipeline* scale, not a result scale. A stated comparison against the
+# single-agent baseline needs >= 3 seeds — see .claude/skills/rl-experiment-hygiene/SKILL.md.
+
+name: mappo-slicing
+seed: 0
+
+topology: mesh-6
+traffic_pattern: diurnal
+flow_count: 9
+episode_length: 128
+
+total_timesteps: 60000
+rollout_length: 256
+epochs: 4
+minibatches: 4
+learning_rate: 0.0003
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+value_coefficient: 0.5
+# Kept non-trivial on purpose: a mediocre allocation already scores well on this problem, so exploration
+# collapses early without it.
+entropy_coefficient: 0.01
+max_grad_norm: 0.5
+hidden_size: 128
+
+max_flows_per_agent: 8
+max_links_per_agent: 12

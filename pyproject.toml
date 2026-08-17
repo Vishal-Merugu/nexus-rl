@@ -13,6 +13,8 @@ dependencies = [
     "nexus-telemetry",
     "nexus-types",
     "nexus-a1",
+    "nexus-registry",
+    "nexus-safety",
     "nexus-sim",
     "nexus-baselines",
     "nexus-mdp",
@@ -21,6 +23,7 @@ dependencies = [
     "nexus-simulator",
     "nexus-controller",
     "nexus-agent",
+    "nexus-supervisor",
 ]
 
 [dependency-groups]
@@ -34,7 +37,7 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/*", "apps/simulator", "apps/controller", "apps/agent-layer"]
+members = ["packages/*", "apps/simulator", "apps/controller", "apps/agent-layer", "apps/safety-supervisor"]
 
 [tool.uv.sources]
 nexus-config = { workspace = true }
@@ -42,6 +45,8 @@ nexus-errors = { workspace = true }
 nexus-telemetry = { workspace = true }
 nexus-types = { workspace = true }
 nexus-a1 = { workspace = true }
+nexus-registry = { workspace = true }
+nexus-safety = { workspace = true }
 nexus-sim = { workspace = true }
 nexus-baselines = { workspace = true }
 nexus-mdp = { workspace = true }
@@ -50,6 +55,7 @@ nexus-rl = { workspace = true }
 nexus-simulator = { workspace = true }
 nexus-controller = { workspace = true }
 nexus-agent = { workspace = true }
+nexus-supervisor = { workspace = true }
 
 [tool.ruff]
 line-length = 110
@@ -96,11 +102,14 @@ known-first-party = [
     "nexus_config",
     "nexus_controller",
     "nexus_env",
-    "nexus_mdp",
     "nexus_errors",
+    "nexus_mdp",
+    "nexus_registry",
+    "nexus_safety",
     "nexus_rl",
     "nexus_sim",
     "nexus_simulator",
+    "nexus_supervisor",
     "nexus_telemetry",
     "nexus_types",
 ]

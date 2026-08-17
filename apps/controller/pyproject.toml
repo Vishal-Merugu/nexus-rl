@@ -19,6 +19,7 @@ dependencies = [
     "nexus-telemetry",
     "nexus-types",
     "nexus-a1",
+    "nexus-registry",
 ]
 
 [project.optional-dependencies]
